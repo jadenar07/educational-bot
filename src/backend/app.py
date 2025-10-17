@@ -3,7 +3,7 @@ import httpx, uvicorn, chromadb, time
 from fastapi import FastAPI, HTTPException, UploadFile, File, Form, Body
 from typing import Union, List
 from utlis.pdf_helpers import read_text_file
-from database.modelsChroma import generate_embedding
+from databases.chroma.modelsChroma import generate_embedding
 import sys
 import os
 import logging
@@ -17,8 +17,8 @@ from backend.modelsPydantic import (
 )
 from services.queryLangchain import fetchGptResponse
 from services.nlpTools import TextProcessor
-from database.crudChroma import CRUD
-from database.modelsChroma import (
+from databases.chroma.crudChroma import CRUD
+from databases.chroma.modelsChroma import (
     generate_embedding, ChatHistory, GuildInfo, ChannelInfo, MemberInfoChannel, ChannelList
 )
 from utlis.prompts import PROMPTS

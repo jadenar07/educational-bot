@@ -1,4 +1,4 @@
-from database.crudChroma import CRUD
+from databases.chroma.crudChroma import CRUD
 
 crud = CRUD()
 client = crud.client
