@@ -3,7 +3,7 @@ import chromadb, uuid, os, urllib.parse, asyncio
 
 
 from utlis.config import DB_PATH
-from database.modelsChroma import generate_embedding
+from databases.chroma.modelsChroma import generate_embedding
 from services.getPdfs import read_hyperlinks, match_filenames_to_urls
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain_community.document_loaders import DirectoryLoader
