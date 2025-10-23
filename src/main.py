@@ -7,7 +7,7 @@ from utlis.config import DISCORD_TOKEN
 
 
 # temp
-from database.crudChroma import CRUD
+from databases.chroma.crudChroma import CRUD
 
 sys.path.append(os.path.join(os.path.dirname(__file__), 'src'))
 

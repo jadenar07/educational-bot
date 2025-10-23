@@ -1,4 +1,5 @@
 # app.py
+
 import httpx, uvicorn, chromadb, time
 from fastapi import FastAPI, HTTPException
 from typing import Union
@@ -14,16 +15,18 @@ from backend.modelsPydantic import (
 )
 from services.queryLangchain import fetchGptResponse
 from services.nlpTools import TextProcessor
-from database.crudChroma import CRUD
-from database.modelsChroma import (
+from databases.chroma.crudChroma import CRUD
+from databases.chroma.modelsChroma import (
     generate_embedding, ChatHistory, GuildInfo, ChannelInfo, MemberInfoChannel, ChannelList
 )
+from databases.postgres.crudPostgres import PostgresCRUD
 from utlis.prompts import PROMPTS
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 
 app = FastAPI()
 crud = CRUD()
+postgres_crud = PostgresCRUD()
 semantic_router = create_router(crud)
 
 @app.post('/channel_query') #, response_model=QueryResponse
