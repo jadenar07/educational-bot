@@ -1,4 +1,5 @@
 # app.py
+
 import httpx, uvicorn, chromadb, time
 from fastapi import FastAPI, HTTPException, UploadFile, File, Form, Body
 from typing import Union, List
@@ -21,6 +22,7 @@ from databases.chroma.crudChroma import CRUD
 from databases.chroma.modelsChroma import (
     generate_embedding, ChatHistory, GuildInfo, ChannelInfo, MemberInfoChannel, ChannelList
 )
+from databases.postgres.crudPostgres import PostgresCRUD
 from utlis.prompts import PROMPTS
 
 sys.path.append(os.path.join(os.path.dirname(__file__), 'src'))
@@ -30,6 +32,7 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(
 
 app = FastAPI()
 crud = CRUD()
+postgres_crud = PostgresCRUD()
 semantic_router = create_router(crud)
 
 @app.get("/health")

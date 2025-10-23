@@ -6,6 +6,6 @@ CREATE TABLE profiles.users(
     email VARCHAR(100) UNIQUE NOT NULL,
     role user_role NOT NULL,
     default_collection VARCHAR(100),
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP WITH TIME ZONE
 )
 -- New table soon for queries, and userqueries(6) should ref this table. 
