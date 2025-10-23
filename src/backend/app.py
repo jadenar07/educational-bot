@@ -1,4 +1,5 @@
 # app.py
+
 import httpx, uvicorn, chromadb, time
 from fastapi import FastAPI, HTTPException
 from typing import Union
@@ -16,10 +17,11 @@ from backend.botRouter import router as bot_router, session_manager
 from backend.botMiddleware import BotSessionMiddleware
 from services.queryLangchain import fetchGptResponse
 from services.nlpTools import TextProcessor
-from database.crudChroma import CRUD
-from database.modelsChroma import (
+from databases.chroma.crudChroma import CRUD
+from databases.chroma.modelsChroma import (
     generate_embedding, ChatHistory, GuildInfo, ChannelInfo, MemberInfoChannel, ChannelList
 )
+from databases.postgres.crudPostgres import PostgresCRUD
 from utlis.prompts import PROMPTS
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
@@ -29,6 +31,7 @@ app.add_middleware(BotSessionMiddleware, session_manager=session_manager)
 app.include_router(bot_router)
 
 crud = CRUD()
+postgres_crud = PostgresCRUD()
 semantic_router = create_router(crud)
 
 @app.post('/channel_query') #, response_model=QueryResponse
