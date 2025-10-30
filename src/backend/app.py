@@ -142,6 +142,44 @@ async def update_info(request: Union[UpdateGuildInfo, UpdateChannelInfo, UpdateM
     logging.info(f"Info updated for {collection_name}")
     return {"status": "Update complete"}
 
+@app.post('/collections')
+async def create_collection(payload: dict):
+    name = payload.get("name")
+    if not name:
+        raise HTTPException(status_code=400, detail="Missing 'name'")
+    result = await crud.create_collection(
+        name=name,
+        description=payload.get("description"),
+        metadata=payload.get("metadata"),
+    )
+    if isinstance(result, dict) and result.get("error"):
+        raise HTTPException(status_code=400, detail=result["error"])
+    info = await crud.get_collection_info(name)
+    if isinstance(info, dict) and info.get("error"):
+        raise HTTPException(status_code=404, detail=info["error"])
+    return info
+
+@app.get('/collections')
+async def list_collections():
+    result = await crud.list_collections()
+    if isinstance(result, dict) and result.get("error"):
+        raise HTTPException(status_code=500, detail=result["error"])
+    return result
+
+@app.get('/collections/{name}')
+async def get_collection(name: str):
+    info = await crud.get_collection_info(name)
+    if isinstance(info, dict) and info.get("error"):
+        raise HTTPException(status_code=404, detail=info["error"])
+    return info
+
+@app.delete('/collections/{name}')
+async def delete_collection(name: str):
+    result = await crud.delete_collection(name)
+    if isinstance(result, dict) and result.get("error"):
+        raise HTTPException(status_code=404, detail=result["error"])
+    return result
+
 @app.post('/load_course_materials')
 async def load_course_materials():
     file_path = "./data/pdf_files"

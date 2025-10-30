@@ -138,4 +138,104 @@ class CRUD():
 
         return data_to_save
 
+    async def get_collection_info(self, name: str):
+        # Get information aboput a part icualr collection 
+        try:
+            collection = self.client.get_collection(name)
+            count = collection.count()
+            metadata = collection.metadata or {}
+            
+            return {
+                "name": collection.name,
+                "description": metadata.get("description"),
+                "metadata": metadata,
+                "document_count": count,
+                "created_at": metadata.get("created_at")
+            }
+            
+        except Exception as e:
+            print(f"Error getting collection info for '{name}': {e}")
+            return {"error": f"Collection '{name}' not found"}
 
+    # Collection Management Methods
+    async def create_collection(self, name: str, description: str = None, metadata: dict = None):
+        """Create a new collection explicitly"""
+        try:
+            # Check if collection already exists
+            try:
+                existing_collection = self.client.get_collection(name)
+                if existing_collection:
+                    return {"error": f"Collection '{name}' already exists"}
+            except:
+                # Collection doesn't exist, which is what we want
+                pass
+            
+            # Create the collection
+            collection = self.client.create_collection(
+                name=name,
+                metadata={"description": description, **(metadata or {})}
+            )
+            
+            print(f"Collection '{name}' created successfully")
+            return {"message": f"Collection '{name}' created successfully", "collection": collection}
+            
+        except Exception as e:
+            print(f"Error creating collection '{name}': {e}")
+            return {"error": str(e)}
+    
+    async def delete_collection(self, name: str):
+        """Deletes a collection"""
+        try:
+            try:
+                collection = self.client.get_collection(name)
+                if collection:
+                    self.client.delete_collection(name)
+                    print(f"Collection '{name}' deleted successfully")
+                    return {"message": f"Collection '{name}' deleted successfully"}
+            except Exception as e:
+                return {"error": f"Collection '{name}' not found"}
+                
+        except Exception as e:
+            print(f"Error deleting collection '{name}': {e}")
+            return {"error": str(e)}
+    
+    async def list_collections(self):
+        """List all collections with metadata"""
+        try:
+            collections = self.client.list_collections()
+            collection_list = []
+            
+            for collection in collections:
+                try:
+                    # Get collection metadata and count
+                    count = collection.count()
+                    metadata = collection.metadata or {}
+                    
+                    collection_info = {
+                        "name": collection.name,
+                        "description": metadata.get("description"),
+                        "metadata": metadata,
+                        "document_count": count,
+                        "created_at": metadata.get("created_at")
+                    }
+                    collection_list.append(collection_info)
+                    
+                except Exception as e:
+                    collection_info = {
+                        "name": collection.name,
+                        "description": None,
+                        "metadata": {},
+                        "document_count": 0,
+                        "created_at": None
+                    }
+                    collection_list.append(collection_info)
+            
+            return {
+                "collections": collection_list,
+                "total_count": len(collection_list)
+            }
+            
+        except Exception as e:
+            print(f"Error listing collections: {e}")
+            return {"error": str(e)}
+    
