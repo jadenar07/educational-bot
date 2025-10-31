@@ -73,7 +73,8 @@ class SemanticRouter:
         return "Start by breaking the problem into smaller parts and focus on the key concepts."
 
     async def material_info_guidance(self, request):
-        return await self.generate_expert_response(request, collection_name="course_materials", prompt_name="course_instructor")
+        return await self.generate_expert_response(request, collection_name="auto", prompt_name="course_instructor")
+        # return await self.generate_expert_response(request, collection_name="course_materials", prompt_name="course_instructor")
 
     async def mental_support_guidance(self, request=None):
         return "If you are feeling overwhelmed, NYU provides free counseling services to help students manage stress."
@@ -84,7 +85,11 @@ class SemanticRouter:
     async def generate_expert_response(self, request, collection_name, prompt_name):
         """Generates response using LLM and relevant documents"""
         query_embedding = await generate_embedding(request.query)
-        collection_name = collection_name
+
+    # If caller asks for "auto", choose by centroid similarity
+        if collection_name == "auto":
+            collection_name = await self._pick_collection_by_centroid(query_embedding)
+         
         relevant_docs = await self.crud.get_data_by_similarity(collection_name, query_embedding, top_k=5)
         
         content = relevant_docs.get('documents')[0]
@@ -94,6 +99,28 @@ class SemanticRouter:
 
         logging.info(f"Answer: {answer}")
         return {'answer': answer}
+
+    async def _pick_collection_by_centroid(self, fallback_collection: str = "course_materials") -> str:
+        try:
+            centroids = self.crud.client.get_or_create_collection("__centroids__")
+            # Get all collections that have centroids
+            results = centroids.get()
+            
+            print("my collection got:", results)
+            if not results["ids"]:
+                print("my no centroids found, using fallback")
+                return fallback_collection
+                
+            # Get the collection with most documents (assuming it's most active/recent)
+            doc_counts = [meta.get("doc_count", 0) for meta in results["metadatas"]]
+            max_docs_idx = doc_counts.index(max(doc_counts))
+            
+            return results["ids"][max_docs_idx]
+            
+        except Exception as e:
+            logging.warning(f"Centroid routing fallback due to error: {e}")
+            return fallback_collection
+
 
     async def process_query(self, request: QueryRequest):
         """Main entry point to process a query through the semantic router"""
@@ -129,6 +156,5 @@ class SemanticRouter:
             logging.error(f"Error processing query: {request.query} | Error: {e}")
             return {"error": str(e)} 
 
-# Factory function to create router instance
 def create_router(crud):
     return SemanticRouter(crud)

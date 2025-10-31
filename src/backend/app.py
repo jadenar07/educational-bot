@@ -91,18 +91,22 @@ async def update_chat_history(request: UpdateChatHistory):
             try:
                 chat_info = ChatHistory(message_info)
                 document, embedding = await chat_info.to_document()
+
+                chat_history.append({
+                    "collection_name": f"chat_history_{message_info.get('channel_id')}",
+                    "document": document,
+                    "embedding": embedding
+                })
+                
             except Exception as e:
                 logging.error(f"Error with updating chat history: {e}")
             
-            chat_history.append({
-                "collection_name": f"chat_history_{message_info.get('channel_id')}",
-                "document": document,
-                "embedding": embedding
-            })
+
 
     # Save chat history to Chromadb
     try:
-        await crud.save_to_db(chat_history)
+        # TODO: removed await from most parts of the code so that it could work. Fix this later...
+        crud.save_to_db(chat_history)
     except Exception as e:
         logging.error(f"Error with saving chat history: {e}")
 

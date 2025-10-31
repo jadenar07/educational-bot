@@ -1,15 +1,18 @@
 # modelsChroma.py
 import asyncio
-from langchain.schema import Document
+from langchain_core.documents import Document
 from langchain_openai import OpenAIEmbeddings
-from langchain_community.embeddings.sentence_transformer import SentenceTransformerEmbeddings
+# TODO: The previous call was deprecated, updated the langchain package and updated the imports
+# Created a new requirements.txt
+from langchain_huggingface import HuggingFaceEmbeddings
 
 # embedding model options
 async def generate_embedding(text, option = "openai"):
     if option == "openai":
         embedding_model = OpenAIEmbeddings(model="text-embedding-ada-002")
     else:
-        embedding_model = SentenceTransformerEmbeddings(model="all-MiniLM-L6-v2")
+        # TODO: This will create a new instance of the model for every call... must fix
+        embedding_model = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
     
     return embedding_model.embed_query(text)
 
@@ -135,7 +138,7 @@ class ChatHistory:
         self.profanity_score = data.get('profanity_score', 0.0)
 
     async def to_document(self):
-        embedding = await generate_embedding(self.content)
+        embedding = await generate_embedding(self.content, "no OPENAI >:(")
         return Document(
             page_content=self.content, 
             metadata={

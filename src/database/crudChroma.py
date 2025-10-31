@@ -1,18 +1,21 @@
 # crudChroma.py
 import chromadb, uuid, os, urllib.parse, asyncio
-
+import numpy as np 
 
 from utlis.config import DB_PATH
 from database.modelsChroma import generate_embedding
 from services.getPdfs import read_hyperlinks, match_filenames_to_urls
-from langchain.text_splitter import RecursiveCharacterTextSplitter
+from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_community.document_loaders import DirectoryLoader
 
 class CRUD():
     def __init__(self):
         self.client = chromadb.PersistentClient(path = DB_PATH)
-        
-    async def save_to_db(self, data):
+    
+    # TODO: as noted, i removed async from most things so that I did not have to call awaiy because it was causing error after error
+    def save_to_db(self, data):
+        collections_embeddings_dict = {}
+
         for item in data:
             collection_name, document, embedding = item['collection_name'], item['document'], item['embedding']
 
@@ -21,17 +24,66 @@ class CRUD():
             collection_name = str(collection_name)
 
             # Note that collection_name is equivalent to channel_id
-            collection = await asyncio.to_thread(self.client.get_or_create_collection, collection_name)
-
-            await asyncio.to_thread(collection.upsert,
-                # Same for id, has to be a str
+            collection = self.client.get_or_create_collection(collection_name)
+            
+            collection.upsert(
                 ids=[str(document.metadata['id'])],
                 documents=[document.page_content],
                 embeddings=[embedding],
-                metadatas=[document.metadata]
-            )
+                metadatas=[document.metadata])
+
+            embedding_array = np.asarray(embedding, dtype=np.float32)
+            if collection_name not in collections_embeddings_dict:
+                collections_embeddings_dict[collection_name] = []
+
+            collections_embeddings_dict[collection_name].append(embedding_array)
 
             print(f"'{document.page_content}' is added to the collection {collection_name}")
+
+        for collection_name, embs in collections_embeddings_dict.items():
+            # shape [total_new_embeddings, emb_dim] (row, col)
+            batch = np.vstack(embs) 
+            self._update_centroid_after_batch, collection_name, batch
+
+    def _update_centroid_after_batch(self, collection_name: str, new_doc_embs: np.ndarray):
+        if new_doc_embs.size == 0:
+            return
+        new_doc_mean = new_doc_embs.mean(axis=0)
+        prev_centroid, prev_total_docs = self._get_centroid_row(collection_name)
+        new_total_docs = new_doc_embs.shape[0]
+        if prev_centroid is None or prev_total_docs == 0:
+            new_centroid = new_doc_mean
+            using_new_total_docs = new_total_docs
+        else:
+            new_centroid = (prev_total_docs *
+                            prev_centroid +
+                            new_total_docs *
+                            new_doc_mean) / (prev_total_docs +
+                                           new_total_docs)
+            
+            using_new_total_docs = prev_total_docs + new_total_docs
+
+        print("my creating centroid for", collection_name)
+        collection = self.client.get_or_create_collection, collection_name
+        collection.upsert(
+            ids=[collection_name],
+            embeddings=[new_centroid.astype(float).tolist()],
+            metadatas=[{"doc_count": int(using_new_total_docs)}],
+            documents=[f"centroid for {collection_name}"],
+        )
+
+    def _get_centroid_row(self, collection_name: str):
+        try:
+            centroid_row = self._centroid_collection.get(ids=[collection_name])
+            if not centroid_row["ids"]:
+                return None, 0
+            
+            centroid_vector = np.array(centroid_row["embeddings"][0], dtype=np.float32)
+            total_documents_in_centroid = int(centroid_row["metadatas"][0].get("doc_count", 0))
+            return centroid_vector, total_documents_in_centroid
+        
+        except Exception:
+            return None, 0
 
     async def get_data_by_similarity(self, collection_name, query_embedding, top_k=10):
         try:
