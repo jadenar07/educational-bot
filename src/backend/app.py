@@ -1,10 +1,14 @@
 # app.py
 import httpx, uvicorn, chromadb, time
-from fastapi import FastAPI, HTTPException
+
 from typing import Union
 import sys
 import os
 import logging
+from fastapi import FastAPI, HTTPException  
+from backend.middleware.role_middleware import RoleMiddleware
+from starlette.requests import Request
+from router.semanticRouter import SemanticRouter  # adjust import
 
 # from router.semanticRouter import process_query
 from router.semanticRouter import create_router
@@ -25,6 +29,13 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(
 app = FastAPI()
 crud = CRUD()
 semantic_router = create_router(crud)
+app.add_middleware(RoleMiddleware, audience="your-audience")
+
+app = FastAPI()
+crud = CRUD()
+semantic_router = create_router(crud)  # returns your SemanticRouter instance
+
+app.add_middleware(RoleMiddleware, audience="your-audience")
 
 @app.post('/channel_query') #, response_model=QueryResponse
 async def channel_query(request: QueryRequest):
@@ -40,7 +51,7 @@ async def channel_query(request: QueryRequest):
         logging.info(f"Relevant messages: {content}")
         logging.info(f"Channel info: {data}")
 
-        # combine the relevant messages and channel info
+        # combine the relevant messages and channel infoF
         combined_data = {
             'relevant_messages': content,
             'channel_info': channel_info
@@ -159,6 +170,12 @@ async def load_course_materials():
     except Exception as e:
         logging.error(f"app.py: Error with loading PDFs: {e}")
         return {"message": "Failed to load PDFs."}
+
+@app.post("/query")
+async def query_endpoint(request: Request, body: QueryRequest):
+    user_role = getattr(request.state, "user_role", "student")  # fallback to student
+    response = await semantic_router.process_query(body, role=user_role)
+    return response
 
 if __name__ == '__main__':
     uvicorn.run(app, host='0.0.0.0', port=8000)
