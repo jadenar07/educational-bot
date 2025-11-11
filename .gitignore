@@ -11,6 +11,7 @@ __pycache__
 .venv
 .env
 .python-version
+venv/
 
 files.json
 test.py
