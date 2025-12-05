@@ -1,8 +1,9 @@
 import os, asyncio
 from openai import OpenAI
 from langchain_openai import ChatOpenAI, OpenAIEmbeddings
-from langchain.prompts import PromptTemplate
-from langchain.chains import RetrievalQA
+from langchain_core.prompts import PromptTemplate
+# TODO: had to comment this out and comment out the part of the code that used it because, as mentioned before, the langchain package has been updated and is not backwards compatible
+# from langchain_community.chains import RetrievalQA
 from langchain_community.vectorstores import Chroma
 from langchain_community.embeddings.sentence_transformer import SentenceTransformerEmbeddings
 from langchain_core.caches import BaseCache
@@ -39,55 +40,55 @@ async def fetchGptResponse(query, role, data=[]):
     return response.content
 
 
-async def fetchLangchainResponse(query, collection_name, top_k=10):
+# async def fetchLangchainResponse(query, collection_name, top_k=10):
 
-    embedding_model = OpenAIEmbeddings(model="text-embedding-ada-002")
-    # embedding_model = SentenceTransformerEmbeddings(model="all-MiniLM-L6-v2")
+#     embedding_model = OpenAIEmbeddings(model="text-embedding-ada-002")
+#     # embedding_model = SentenceTransformerEmbeddings(model="all-MiniLM-L6-v2")
 
-    # Initialize the ChromaDB client and retriever
-    client = Chroma(
-        embedding_function=embedding_model,
-        persist_directory=DB_PATH, 
-        collection_name=str(collection_name)
-    )
+#     # Initialize the ChromaDB client and retriever
+#     client = Chroma(
+#         embedding_function=embedding_model,
+#         persist_directory=DB_PATH, 
+#         collection_name=str(collection_name)
+#     )
 
-    try:
-        # Initialize the RetrievalQA chain
-        chatbot_chain = RetrievalQA.from_chain_type(
-            llm=llm,
-            chain_type="stuff",
-            retriever=client.as_retriever(
-                search_type="similarity_score_threshold", 
-                search_kwargs={"k": top_k, "score_threshold": DISTANCE_THRESHOLD}
-            ),
-            verbose=True, 
-            return_source_documents=True,
-        )
+#     try:
+#         # Initialize the RetrievalQA chain
+#         chatbot_chain = RetrievalQA.from_chain_type(
+#             llm=llm,
+#             chain_type="stuff",
+#             retriever=client.as_retriever(
+#                 search_type="similarity_score_threshold", 
+#                 search_kwargs={"k": top_k, "score_threshold": DISTANCE_THRESHOLD}
+#             ),
+#             verbose=True, 
+#             return_source_documents=True,
+#         )
 
-        # Define the prompt template
-        template = f"""
-        Respond as clearly as possible with more than 100 words {query}?
-        """
+#         # Define the prompt template
+#         template = f"""
+#         Respond as clearly as possible with more than 100 words {query}?
+#         """
 
-        prompt = PromptTemplate(
-            input_variables=["query"],
-            template=template,
-        )
+#         prompt = PromptTemplate(
+#             input_variables=["query"],
+#             template=template,
+#         )
 
-        # Run the query through the chatbot chain
-        response = chatbot_chain.invoke(prompt.format(query=query))
+#         # Run the query through the chatbot chain
+#         response = chatbot_chain.invoke(prompt.format(query=query))
 
-        # Extract and print source documents
-        source_documents = response.get('source_documents', [])
-        sources = [doc.metadata['source'] for doc in source_documents]
-        sources = list(set(sources))
-        response["sources"] = sources
+#         # Extract and print source documents
+#         source_documents = response.get('source_documents', [])
+#         sources = [doc.metadata['source'] for doc in source_documents]
+#         sources = list(set(sources))
+#         response["sources"] = sources
 
-        return response
+#         return response
 
-    except Exception as e:
-        print(f"Error with fetching Langchain response: {e}")
-        return "I'm sorry, I couldn't find an answer to that question."
+#     except Exception as e:
+#         print(f"Error with fetching Langchain response: {e}")
+#         return "I'm sorry, I couldn't find an answer to that question."
 
 
 async def fetchGptResponseTwo(query, role, data=[]):
