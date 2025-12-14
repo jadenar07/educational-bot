@@ -7,14 +7,26 @@ from databases.chroma.modelsChroma import generate_embedding
 from services.getPdfs import read_hyperlinks, match_filenames_to_urls
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain_community.document_loaders import DirectoryLoader
+import logging
+
+logger = logging.getLogger("crudChroma")
+logger.setLevel(logging.INFO)
+handler = logging.StreamHandler()
+formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
+handler.setFormatter(formatter)
+if not logger.hasHandlers():
+    logger.addHandler(handler)
 
 class CRUD():
     def __init__(self):
         self.client = chromadb.PersistentClient(path = DB_PATH)
         
     async def save_to_db(self, data):
+        logger.info(f"Saving {data} to db")
         for item in data:
-            collection_name, document, embedding = item['collection_name'], item['document'], item['embedding']
+            collection_name, document, embedding, metadata = (
+                item['collection_name'], item['document'], item['embedding'], item.get('metadata', {})
+            )
 
             # Change collection_name to type str since it was an int, but has to
             # be a str in order to be used as a collection name
@@ -23,15 +35,27 @@ class CRUD():
             # Note that collection_name is equivalent to channel_id
             collection = await asyncio.to_thread(self.client.get_or_create_collection, collection_name)
 
-            await asyncio.to_thread(collection.upsert,
-                # Same for id, has to be a str
-                ids=[str(document.metadata['id'])],
-                documents=[document.page_content],
+            # Handle both document types: (1) LangChain Document object, (2) plain string
+            if hasattr(document, 'metadata') and hasattr(document, 'page_content'):
+                # LangChain Document
+                doc_id = str(document.metadata.get('id', 'unknown'))
+                doc_content = document.page_content
+                doc_metadata = document.metadata
+            else:
+                # Plain string (from Discord upload)
+                doc_id = str(metadata.get('id', str(uuid.uuid4())))
+                doc_content = document
+                doc_metadata = metadata
+
+            await asyncio.to_thread(
+                collection.upsert,
+                ids=[doc_id],
+                documents=[doc_content],
                 embeddings=[embedding],
-                metadatas=[document.metadata]
+                metadatas=[doc_metadata]
             )
 
-            print(f"'{document.page_content}' is added to the collection {collection_name}")
+            print(f"'{doc_content[:50]}' is added to the collection {collection_name}")
 
     async def get_data_by_similarity(self, collection_name, query_embedding, top_k=10):
         try:
@@ -137,6 +161,27 @@ class CRUD():
             })
 
         return data_to_save
+    
+    async def save_pdfs_from_discord(self, user, collection_name, pdf):
+        print(f"Saving PDFs from {user} to collection {collection_name}")
+
+        doc, embedding = pdf
+        
+        data_to_save = []
+        # Prepare the metadata for saving
+        metadata = {
+            "source": user
+        }
+
+        # Add to data to be saved
+        data_to_save.append({
+            "collection_name": collection_name,
+            "document": doc,
+            "embedding": embedding,
+            "metadata": metadata
+        })
+
+        return data_to_save
 
     async def get_collection_info(self, name: str):
         # Get information aboput a part icualr collection 
@@ -144,13 +189,18 @@ class CRUD():
             collection = self.client.get_collection(name)
             count = collection.count()
             metadata = collection.metadata or {}
-            
+
+            # Get a sample of document IDs (or other identifying info)
+            docs = collection.get(limit=3)  # Adjust as needed; may need to use your DB's API
+            sample_docs = docs.get("ids", []) if docs else []
+
             return {
                 "name": collection.name,
                 "description": metadata.get("description"),
                 "metadata": metadata,
                 "document_count": count,
-                "created_at": metadata.get("created_at")
+                "created_at": metadata.get("created_at"),
+                "sample_documents": sample_docs  # Add this line
             }
             
         except Exception as e:
@@ -158,7 +208,7 @@ class CRUD():
             return {"error": f"Collection '{name}' not found"}
 
     # Collection Management Methods
-    async def create_collection(self, name: str, description: str = None, metadata: dict = None):
+    async def create_collection(self, name: str, description: str = None, metadata = None):
         """Create a new collection explicitly"""
         try:
             # Check if collection already exists
@@ -173,7 +223,7 @@ class CRUD():
             # Create the collection
             collection = self.client.create_collection(
                 name=name,
-                metadata={"description": description, **(metadata or {})}
+                metadata={"description": description, **(metadata)}
             )
             
             print(f"Collection '{name}' created successfully")

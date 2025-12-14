@@ -1,6 +1,6 @@
 # modelsPydantic.py
 from pydantic import BaseModel
-from typing import List, Dict, Optional
+from typing import List, Dict, Optional, Any
 
 class QueryRequest(BaseModel):
     guild_id: int
@@ -56,4 +56,9 @@ class UpdateChannelList(BaseModel):
     user_name: str
     guild_id: int
     channel_ids: List[int]
+
+class CollectionCreate(BaseModel):
+    name: str
+    description: Optional[str] = None
+    metadata: Optional[Dict[str, Any]] = {}
     

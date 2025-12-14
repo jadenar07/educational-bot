@@ -1,8 +1,10 @@
 # app.py
 
 import httpx, uvicorn, chromadb, time
-from fastapi import FastAPI, HTTPException
-from typing import Union
+from fastapi import FastAPI, HTTPException, UploadFile, File, Form
+from typing import Union, List
+from utlis.pdf_helpers import read_text_file
+from databases.chroma.modelsChroma import generate_embedding
 import sys
 import os
 import logging
@@ -11,7 +13,7 @@ import logging
 from router.semanticRouter import create_router
 from backend.modelsPydantic import (
     QueryResponse, QueryRequest, UpdateChannelInfo, UpdateChatHistory, 
-    UpdateGuildInfo, UpdateMemberInfo, UpdateChannelList
+    UpdateGuildInfo, UpdateMemberInfo, UpdateChannelList, CollectionCreate
 )
 from services.queryLangchain import fetchGptResponse
 from services.nlpTools import TextProcessor
@@ -145,15 +147,16 @@ async def update_info(request: Union[UpdateGuildInfo, UpdateChannelInfo, UpdateM
     logging.info(f"Info updated for {collection_name}")
     return {"status": "Update complete"}
 
+# likely don't need
 @app.post('/collections')
-async def create_collection(payload: dict):
-    name = payload.get("name")
+async def create_collection(payload: CollectionCreate):
+    name = payload.name
     if not name:
         raise HTTPException(status_code=400, detail="Missing 'name'")
     result = await crud.create_collection(
         name=name,
-        description=payload.get("description"),
-        metadata=payload.get("metadata"),
+        description=payload.description,
+        metadata=payload.metadata,
     )
     if isinstance(result, dict) and result.get("error"):
         raise HTTPException(status_code=400, detail=result["error"])
@@ -200,6 +203,52 @@ async def load_course_materials():
     except Exception as e:
         logging.error(f"app.py: Error with loading PDFs: {e}")
         return {"message": "Failed to load PDFs."}
+    
+# @app.post('/upload_materials')
+# async def upload_course_materials(collection_name: str):
+#     try:
+#         collection = await crud.create_collection(collection_name)
+#         # data = await crud.save_pdfs(file_path, collection_name)
+
+#         data =  
+
+#         # save the data to the database in chunks of ten documents
+#         chunk_size = 10
+#         for i in range(0, len(data), chunk_size):
+#             await crud.save_to_db(data[i:i+chunk_size])
+
+#         return {"message": "PDFs loaded successfully."}
+    
+#     except Exception as e:
+#         logging.error(f"app.py: Error with loading PDFs: {e}")
+#         return {"message": "Failed to load PDFs."}
+
+@app.post("/upload_pdfs")
+async def upload_multiple_pdfs(files: List[UploadFile] = File(...), collection_name: str = Form(...), user: str = Form(...)):
+    """
+    Handles the upload of multiple PDF files.
+    """
+
+    for file in files:
+        if file.content_type != "application/pdf":
+            # Optional: Add content type validation
+            raise HTTPException(status_code=400, detail=f"Invalid file type for {file.filename}. Only PDFs are allowed.")
+        try:
+            text = await read_text_file(file)
+            file_embeddings = await generate_embedding(text)
+
+            # lets make it so they have to enter the collection name to upload a pdf
+            pdf = (text, file_embeddings)
+            data = await crud.save_pdfs_from_discord(user,collection_name, pdf)
+
+            chunk_size = 10
+            for i in range(0, len(data), chunk_size):
+                await crud.save_to_db(data[i:i+chunk_size])
+
+            return {"message": "PDFs saved successfully."}
+        except Exception as e:
+            logging.error(f"app.py: Error with loading PDFs: {e}")
+            return {"message": "Failed to save PDFs."}
 
 if __name__ == '__main__':
     uvicorn.run(app, host='0.0.0.0', port=8000)
