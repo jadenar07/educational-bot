@@ -16,6 +16,13 @@ async def send_to_app(route, data):
         response = await client.post(f'http://localhost:8000/{route}', json=data)
     return response
 
+async def get_from_app(route, params=None):
+    async with httpx.AsyncClient(timeout=60.0) as client:
+        return await client.get(
+            f"http://localhost:8000/{route}",
+            params=params
+        )
+
 async def update_message(all_messages, bot_user, chunk_size=25):
     for channel_id, messages in all_messages.items():
         for chunk in chunk_list(messages, chunk_size):
@@ -118,12 +125,15 @@ async def message_filter(message, bot_user):
 async def available_commands():
     commands = (
         "Use / to view commands and interact with the Course Assistant:\n"
-        "   1. /info - List available commands"
+        "1. /info - List available commands"
         "2. /channel - Queries related to channel\n"
         "3. /resource - Queries related to the course\n"
         "4. /setup - Use ONLY ONE time to setup chat history and server information. \n"
         "5. /load_course_materials - use ONLY ONE time to load course materials from course website\n"
         "6. /remove - Remove bot from channel\n"
+        "7. /upload_pdf - upload the pdfs of your choice AFTER creating a collection"
+        "8. /create - create a collection"
+        "9. /get_collections - get a list of all the collections"
     )
     return commands
 

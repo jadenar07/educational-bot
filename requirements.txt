@@ -158,4 +158,6 @@ zipp==3.20.2
 sentence-transformers==2.3.0
 torch==2.3.1
 PyNaCl==1.5.0
+python-multipart
+PyPDF2
 
