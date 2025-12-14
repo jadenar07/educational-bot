@@ -189,6 +189,7 @@ async def update_info(request: Union[UpdateGuildInfo, UpdateChannelInfo, UpdateM
     logging.info(f"Info updated for {collection_name}")
     return {"status": "Update complete"}
 
+# likely don't need
 @app.post('/collections')
 async def create_collection(payload: CollectionCreate):
     name = payload.name
