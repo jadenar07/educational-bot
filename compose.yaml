@@ -7,7 +7,7 @@ services:
     env_file:
       - .env
     volumes:
-      - ./src/docker/init-db.sql:/docker-entrypoint-initdb.d/init-db.sql
+      - ./src/docker:/docker-entrypoint-initdb.d
     restart: always
   pgadmin:
     image: dpage/pgadmin4

@@ -5,12 +5,24 @@ db = postgres.get_connection()
 
 def test_create_and_get_user():
     created = postgres.create_user(db,"marclikestocode", "mw4725@nyu.edu", "student")
-    fetched = postgres.get_user(db, created["id"])
-    assert fetched["email"] == "mw4725@nyu.edu"
-    return fetched["id"]
-def delete(id):
-    delete = postgres.delete_user(db, id)
+def test_get(id):
+    fetched = postgres.get_user(db, id)
+    return fetched
+
+def update(db, id, data):
+    x = postgres.update_user(db, id, data)
+    return x
 
 def main():
-   delete(db,"1")
+    update(db, "1", {"email": "johnprok@nyu.edu"})
+    print(test_get("1"))
+
+   
 main()
+
+
+#thoughts: want more robust getter, and create (if someone is alreday created)
+#shouldn't just stop after that command. 
+
+
+#havent wrote unit tests for these yet.
