@@ -34,17 +34,34 @@ class PostgresCRUD():
             db.commit()
             return {"id": user_id, "message": "User created successfully!"}
 
-    def get_user(self, db, user_id):
-        with db.cursor() as cur:
-            cur.execute("""
-                SELECT * FROM profiles.users WHERE id = %s;
-            """, (user_id,))
-            user_info = cur.fetchone()
-            if not user_info:
-                return {"error": "User not found"}
-            return user_info
+    def get_user(self, db, user_id: int | None = None, email: str | None = None, username: str | None = None):
+        # Build an ordered list of candidate lookups
+        candidates = []
+        if user_id is not None:
+            candidates.append(("id", user_id))
+        if email is not None:
+            candidates.append(("email", email))
+        if username is not None:
+            candidates.append(("username", username))
+
+        if not candidates:
+            return {"error": "Provide user_id, email, or username"}
+
+        try:
+            with db.cursor() as cur:
+                for field, value in candidates:
+                    cur.execute(f"SELECT * FROM profiles.users WHERE {field} = %s;", (value,))
+                    user = cur.fetchone()
+                    if user is not None:
+                        return user
+
+        except psycopg2.Error as e:
+            # This is a real DB error (syntax, connection, etc.)
+            return {"error": "Database query failed", "details": str(e)}
+
+        return {"error": "User not found"}
+
         
-    #id immutable, role can be Up, name can be Up, username can be updated
     def update_user(self, db, user_id, new_data):
         with db.cursor() as cur:
             # Create a list of field assignments like "email = %s"
@@ -59,7 +76,7 @@ class PostgresCRUD():
             return updated
 
 
-    def delete_user(self, db, user_id):
+    def delete_user(self, db, user_id, username=None):
         with db.cursor() as cur:
             cur.execute("""
                 DELETE FROM profiles.users WHERE id = %s RETURNING id;
@@ -69,5 +86,6 @@ class PostgresCRUD():
             db.commit()
             if deleted:
                 return {"id": user_id, "message": "User deleted successfully!"}
-            return {"error": "User not found"}
+            else:
+                return {"error": "User not found"}
     
