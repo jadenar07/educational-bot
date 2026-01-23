@@ -11,6 +11,7 @@ from backend.modelsPydantic import QueryRequest
 from database.modelsChroma import generate_embedding
 from services.queryLangchain import fetchGptResponse
 from router.utterances import UTTERANCES
+from router.RouteMap import ThreadSafeMap
 
 # Logging
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
@@ -22,61 +23,37 @@ class SemanticRouter:
         # Set up variables
         self.crud = crud
         self.encoder = LocalEncoder()
-        self._setup_routes()
-        
-    def _setup_routes(self):
-        """Initialize routes and route layer"""
-        # Route definitions and their utterances
-        self.progress_report_rt = Route(
-            name="progress_report",
-            utterances=UTTERANCES["progress_report"],
-        )
-
-        self.problem_solve_rt = Route(
-            name="problem_solve",
-            utterances=UTTERANCES["problem_solve"],
-        )
-
-        self.material_info_rt = Route(
-            name="material_info",
-            utterances=UTTERANCES["material_info"],
-        )
-
-        self.mental_support_rt = Route(
-            name="mental_support",
-            utterances=UTTERANCES["mental_support"],
-        )
-
-        # Define Route Layer
-        self.route_layer = AurelioSemanticRouter(encoder=self.encoder, routes=[
-            self.progress_report_rt,
-            self.problem_solve_rt,
-            self.material_info_rt,
-            self.mental_support_rt,
-        ], auto_sync="local")
-
-        
-        # Setup response mapping
-        self.route_responses = {
-            "progress_report": self.progress_report_guidance,
-            "problem_solve": self.problem_solve_guidance,
-            "material_info": self.material_info_guidance,
-            "mental_support": self.mental_support_guidance,
-            "fallback": self.fallback_response,
-        }
+        self.routes = []
+        self.route_layer = AurelioSemanticRouter(encoder=self.encoder, routes=[], auto_sync="local")
     
-    # Response functions
-    async def progress_report_guidance(self, request=None):
-        return "Tracking your submitted labs and reviewing feedback will help ensure steady progress."
+    #create collections endpoint is going to need to make a call to chatgpt when
+    # given a description and create utterances based on it
 
-    async def problem_solve_guidance(self, request=None):
-        return "Start by breaking the problem into smaller parts and focus on the key concepts."
+    # has to change entirely
+    def _setup_routes(self, routes: ThreadSafeMap):
+        """Initialize routes and route layer"""
+        router_routes = []
+        for route, utterances in routes.items():
+            route_obj = Route(name=route, utterances=utterances)
+            router_routes.append(route_obj)
+        self.route_layer.routes = router_routes
+        # Ensure the index is built/synced after setting routes
+        if hasattr(self.route_layer, "sync"):
+            self.route_layer.sync("local")
+        logging.info(f"Successfully setup routes: {self.route_layer.routes}")
+        return {"status": "routes setup", "routes": [r.name for r in router_routes]}
+    
+    def add_route(self, name, utterances):
+        logging.info(f"Before adding routes: {self.route_layer.routes}\n")
+        logging.info(f"name: {name}, utterances: {utterances}")
+        route_obj = Route(name=name, utterances=utterances)
+        self.routes.append(route_obj)
+        self.route_layer.routes = self.routes
+        # Ensure the index is built/synced after adding a route
+        if hasattr(self.route_layer, "sync"):
+            self.route_layer.sync("local")
+        logging.info(f"Successfully added routes: {self.route_layer.routes}")
 
-    async def material_info_guidance(self, request):
-        return await self.generate_expert_response(request, collection_name="course_materials", prompt_name="course_instructor")
-
-    async def mental_support_guidance(self, request=None):
-        return "If you are feeling overwhelmed, NYU provides free counseling services to help students manage stress."
 
     async def fallback_response(self, request=None):
         return "I'm not sure I understood that. Could you rephrase or ask something more specific?"
@@ -98,32 +75,14 @@ class SemanticRouter:
     async def process_query(self, request: QueryRequest):
         """Main entry point to process a query through the semantic router"""
         try:
+            logging.info("Attempting to use route layer")
             route = self.route_layer(request.query)
+            logging.info(f"Response from the route layer: {route}, original query: {request.query}")
 
             # Log the processed route details
             logging.info(f"Processed route: {route}")
 
-            if hasattr(route, 'name') and route.name:
-                response_function = self.route_responses.get(route.name, self.fallback_response)
-
-                # Handle async and non-async functions
-                if inspect.iscoroutinefunction(response_function):
-                    response = await response_function(request)
-                else:
-                    response = response_function(request)
-            else:
-                response = await self.fallback_response(request)
-
-            # Ensure response is properly formatted
-            if inspect.iscoroutine(response):
-                response = await response 
-                
-            if isinstance(response, dict):
-                return response  
-            elif isinstance(response, str):
-                return {"answer": response}  
-            else:
-                return {"answer": str(response)} 
+            return route 
 
         except Exception as e:
             logging.error(f"Error processing query: {request.query} | Error: {e}")

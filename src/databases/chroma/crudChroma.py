@@ -22,7 +22,7 @@ class CRUD():
         self.client = chromadb.PersistentClient(path = DB_PATH)
         
     async def save_to_db(self, data):
-        logger.info(f"Saving {data} to db")
+        # logger.info(f"Saving {data} to db")
         for item in data:
             collection_name, document, embedding, metadata = (
                 item['collection_name'], item['document'], item['embedding'], item.get('metadata', {})
@@ -76,6 +76,15 @@ class CRUD():
 
         except Exception as e:
             print(f"Error with retrieving relevant history: {e}")
+            return []
+    
+    async def get_all_documents(self, collection_name):
+        try:
+            collection = self.client.get_collection(collection_name)
+            results = collection.get()  # No filters, gets all documents
+            return results
+        except Exception as e:
+            print(f"Error retrieving all documents: {e}")
             return []
     
     async def get_data_by_id(self, collection_name, ids):

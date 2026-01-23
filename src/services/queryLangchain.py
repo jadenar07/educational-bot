@@ -6,7 +6,10 @@ from langchain.chains import RetrievalQA
 from langchain_community.vectorstores import Chroma
 from langchain_community.embeddings.sentence_transformer import SentenceTransformerEmbeddings
 from langchain_core.caches import BaseCache
-from utlis.config import OPENAI_API_KEY, DB_PATH, DISTANCE_THRESHOLD
+from src.utlis.config import OPENAI_API_KEY, DB_PATH, DISTANCE_THRESHOLD
+
+import sys
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')))
 
 llm = ChatOpenAI(
     temperature=0,
