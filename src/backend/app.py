@@ -1,6 +1,6 @@
 # app.py
 import httpx, uvicorn, chromadb, time
-from fastapi import FastAPI, HTTPException, UploadFile, File, Form
+from fastapi import FastAPI, HTTPException, UploadFile, File, Form, Body
 from typing import Union, List
 from utlis.pdf_helpers import read_text_file
 from database.modelsChroma import generate_embedding
@@ -10,6 +10,7 @@ import logging
 
 # from router.semanticRouter import process_query
 from router.semanticRouter import create_router
+from router.utterances import create_utterances, UTTERANCES
 from backend.modelsPydantic import (
     QueryResponse, QueryRequest, UpdateChannelInfo, UpdateChatHistory, 
     UpdateGuildInfo, UpdateMemberInfo, UpdateChannelList, CollectionCreate
@@ -27,6 +28,10 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(
 app = FastAPI()
 crud = CRUD()
 semantic_router = create_router(crud)
+
+@app.get("/health")
+async def health():
+    return {"status": "ok"}
 
 @app.post('/channel_query') #, response_model=QueryResponse
 async def channel_query(request: QueryRequest):
@@ -56,16 +61,50 @@ async def channel_query(request: QueryRequest):
         logging.error(f"Error with channel related question: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
+@app.post('/setup_routes') # sets the routes in the router
+async def setup_routes(routes: dict = Body(...)):
+    try:
+        logging.info("Attempting to setup routes\n")
+        response = semantic_router._setup_routes(routes)
+
+        if response is None:
+            raise ValueError("Could not setup routes - endpoint call")
+        return response
+    except Exception as e:
+        logging.error(f"Error with setting up routes: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 @app.post('/resource_query') #, response_model=QueryResponse
 async def resource_query(request: QueryRequest):
     try:
         # response = await process_query(crud, request)
+        logging.info("Attempting to do resource query")
         response = await semantic_router.process_query(request)
+        
+        # should generate a response based on this
 
         if response is None:
             raise ValueError("Process_query returned none")
+    
+        documents = await crud.get_all_documents(response.name)
 
-        return response
+        relevant_documents = documents.get('documents', [])
+
+        logging.info(f"Relevant documents: {relevant_documents}")
+
+        query = request.query
+        # combine the relevant messages and channel info
+        combined_data = {
+            "relevant_docuements": relevant_documents,
+            "query": query,
+            "question_type": response 
+        }
+
+        answer = await fetchGptResponse(
+                    query, PROMPTS['expert_instruction'], combined_data
+                )        
+        logging.info(f"Answer: {answer}")
+        return {'answer': answer}
 
     except Exception as e:
         logging.error(f"Error with course material related question: {e}")
@@ -144,18 +183,38 @@ async def update_info(request: Union[UpdateGuildInfo, UpdateChannelInfo, UpdateM
     logging.info(f"Info updated for {collection_name}")
     return {"status": "Update complete"}
 
-# likely don't need
 @app.post('/collections')
 async def create_collection(payload: CollectionCreate):
     name = payload.name
     if not name:
         raise HTTPException(status_code=400, detail="Missing 'name'")
+    description = payload.description if payload.description is not None else ""
+    metadata = payload.metadata if payload.metadata is not None else {}
     result = await crud.create_collection(
         name=name,
-        description=payload.description,
-        metadata=payload.metadata,
+        description=description,
+        metadata=metadata,
     )
+
+    # generate utterances based on the description
+    query = f"name: {name}, description: {description}"
+    try:
+        logging.info("attempting to create utterances")
+        await create_utterances(query)
+    except Exception as e:
+        logging.error(f"Failed to generate utterances for collection '{name}': {e}")
+    
+    new_utterances = await UTTERANCES.get(name)
+
+    if new_utterances:
+        semantic_router.add_route(name=name, utterances=new_utterances)
+    else:
+        logging.warning(f"No utterances found for collection '{name}', route not added.")
+
+    semantic_router.add_route(name=name, utterances=new_utterances)
+    
     if isinstance(result, dict) and result.get("error"):
+        logging.error(result.get("error"))
         raise HTTPException(status_code=400, detail=result["error"])
     info = await crud.get_collection_info(name)
     if isinstance(info, dict) and info.get("error"):
@@ -244,8 +303,48 @@ async def upload_multiple_pdfs(files: List[UploadFile] = File(...), collection_n
 
             return {"message": "PDFs saved successfully."}
         except Exception as e:
-            logging.error(f"app.py: Error with loading PDFs: {e}")
+            logging.error(f"app.py: Error with uploading PDFs: {e}")
             return {"message": "Failed to save PDFs."}
+
+@app.post('/grading_expert') #, response_model=QueryResponse
+async def grading_expert(file: UploadFile = File(...)):
+    file_embeddings = None
+
+
+    try:
+        if file.content_type != "application/pdf":
+            raise HTTPException(status_code=400, detail=f"Invalid file type for {file.filename}. Only PDFs are allowed.")
+
+        text = await read_text_file(file)
+        file_embeddings = await generate_embedding(text)
+    
+        if not file_embeddings:
+            return
+        
+        
+        rubric_docs = await crud.get_all_documents("grading_expert")
+
+        rubric_texts = rubric_docs.get('documents', [])
+
+        logging.info(f"Relevant documents: {rubric_texts}")
+
+        # combine the relevant messages and channel info
+        combined_data = {
+            "rubric": rubric_texts,
+            "submission": text
+        }
+
+        answer = await fetchGptResponse(
+                    text, PROMPTS['grading_expert'], combined_data
+                )        
+        logging.info(f"Answer: {answer}")
+        return {'answer': answer}
+
+    except Exception as e:
+        logging.error(f"Error grading submission: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 
 if __name__ == '__main__':
     uvicorn.run(app, host='0.0.0.0', port=8000)

@@ -11,9 +11,20 @@ from backend.modelsPydantic import UpdateChatHistory, Message
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 nlp_tools = TextProcessor()
 
+# todo: move these later
 async def send_to_app(route, data):
     async with httpx.AsyncClient(timeout=60.0) as client:
-        response = await client.post(f'http://localhost:8000/{route}', json=data)
+            logging.info(f'route: {route}')
+            if route == "upload_pdfs":
+                # For file uploads, data is a dict with files and form fields
+                response = await client.post(f'http://localhost:8000/{route}', **data)
+            elif route == "collections":
+                # For collections, send JSON body
+                response = await client.post(f'http://localhost:8000/{route}', json=data)
+            else:
+                logging.info(f"route: {route}, data: {data}")
+                response = await client.post(f'http://localhost:8000/{route}', json=data)
+                logging.info(f'response code at send app level: {response.status_code}')
     return response
 
 async def get_from_app(route, params=None):

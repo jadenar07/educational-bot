@@ -20,7 +20,11 @@ class DiscordBot:
         self.approved_channels = set()
         self.message_global = None
         self.attachments = None
+        self.routes = None
         self.setup_bot()
+
+    def set_routes(self, routes):
+        self.routes = routes
 
     def setup_bot(self):
         @self.bot.event
@@ -126,6 +130,7 @@ class DiscordBot:
         @self.tree.command(name="resource", description="Query for resources")
         @app_commands.describe(query="The query you want to ask")
         async def resource(interaction: discord.Interaction, query: str):
+            logging.info(f"Discord sends request to resource query: {query}")
             await self.handle_query(interaction, 'resource_query', query)
 
         @self.tree.command(name="channel", description="Query for channel information")
@@ -135,13 +140,24 @@ class DiscordBot:
         
         @self.tree.command(name="create_collection", description="Create a collection to store material")
         @app_commands.describe(collection_name="The name for your material")
-        async def create_collection(interaction: discord.Interaction, collection_name: str):
+        @app_commands.describe(description="The description for your collection")
+        async def create_collection(interaction: discord.Interaction, collection_name: str, description: str):
+            await interaction.response.send_message(f"Creating collection `{collection_name}`...")
+            # Use a special flag in the payload to indicate JSON, or rely on send_to_app logic for /collections
+            response = await send_to_app('collections', {'name': collection_name, 'description': description})
+            if not response or response.status_code != 200:
+                logging.info(getattr(response, 'text', str(response)))
+                return
             
-            response = await send_to_app('/collections', {'name': collection_name})
             if response and response.status_code == 200:
+                self.routes.set(collection_name, description)
                 await interaction.followup.send(f"Collection `{collection_name}` created successfully.")
             else:
-                await interaction.followup.send(f"Failed to create collection `{collection_name}`.")
+                logging.info(response.text)
+                if not interaction.response.is_done():
+                    await interaction.response.send_message(f"Failed to create collection `{collection_name}`.")
+                else:
+                    await interaction.followup.send(f"Failed to create collection `{collection_name}`.")
 
         @self.tree.command(name="get_collections", description="Retrieve all of the existing collections")
         async def get_collections(interaction: discord.Interaction):
@@ -191,6 +207,32 @@ class DiscordBot:
                 await interaction.followup.send(formatted)
             else:
                 await interaction.followup.send("Failed to retrieve collection info.")
+        @self.bot.command(name="grade")
+        async def grade(ctx):
+            # Only respond to messages with attachments
+            pdf_attachments = [
+                a for a in ctx.message.attachments
+                if a.content_type == "application/pdf" or a.filename.endswith(".pdf")
+            ]
+            if not pdf_attachments:
+                await ctx.send("Please attach a PDF file to your message.")
+                return
+
+            pdf_document = pdf_attachments[0]  # Only take the first PDF
+            file_bytes = await pdf_document.read()
+            file = ("file", (pdf_document.filename, file_bytes, "application/pdf"))
+
+            async with httpx.AsyncClient(timeout=60.0) as client:
+                response = await client.post(
+                    "http://localhost:8000/grading_expert",
+                    files=[file]
+                )
+
+            if response.status_code == 200:
+                answer = response.json().get("answer", "No answer returned.")
+                await ctx.send(f"Grading completed:\n{answer}")
+            else:
+                await ctx.send(f"Failed to grade submission: {response.text}")
 
     async def update_server_info(self, interaction: discord.Interaction):
         logging.info("Updating server information and chat history to ChromaDB...")
@@ -259,7 +301,7 @@ class DiscordBot:
             'channel_id': interaction.channel.id,
             'query': query
         }
-
+        
         await interaction.response.send_message(f"/{query_type} {query}")
         
         # Calculate profanity score for the query
@@ -276,6 +318,9 @@ class DiscordBot:
             "created_at": interaction.created_at
         })
 
+        logging.info(f"Message info: {message_info}")
+
+
         if profanity_score > PROFANITY_THRESHOLD:
             await interaction.followup.send(f"{current_author.mention} your query has a high profanity score: {int(profanity_score*100)}")
             return
@@ -284,14 +329,21 @@ class DiscordBot:
         
         response = await send_to_app(query_type, data)
 
+        logging.info(f"Attempting send to app: {response}, {response.status_code}")
+
         if response.status_code == 200:
-            if isinstance(response.json().get('answer', {}), str):
-                result = response.json().get('answer', {})
+            response_json = response.json()
+            logging.info("JSON response inside handle query",response_json)
+            answer = response_json.get('answer', {})
+            if isinstance(answer, str):
+                result = answer
                 sources = []
+            elif isinstance(answer, dict):
+                result = answer.get('result', 'No result found')
+                sources = answer.get('sources', [])
             else:
-                response_json = response.json()
-                result = response_json.get('answer', {}).get('result', 'No result found')
-                sources = response_json.get('answer', {}).get('sources', [])
+                result = str(answer)
+                sources = []
 
             formatted_sources = '\n'.join([f"{source}" for source in sources])
             combined_result = result + (f"\n\nSources:\n{formatted_sources}" if sources else "")
@@ -310,6 +362,8 @@ class DiscordBot:
             return []
 
         return pdf_attachments
+
+
 
 
 
