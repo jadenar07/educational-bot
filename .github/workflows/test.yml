@@ -1,4 +1,4 @@
-name: Test PRs 
+name: Test PR 
 
 on:
   push:
@@ -10,7 +10,7 @@ on:
       - main
   workflow_dispatch:
 jobs:
-    test:
+    postgres_tests:
       runs-on: ubuntu-latest
 
       services:
@@ -22,6 +22,8 @@ jobs:
             POSTGRES_DB: ${{ secrets.POSTGRES_DB }}
           ports:
             - 5432:5432
+          volumes:
+            - ./src/databases/postgres/init-db.sql:/docker-entrypoint-initdb.d/init-db.sql
           options: >-
             --health-cmd="pg_isready -U marc"
             --health-interval=10s

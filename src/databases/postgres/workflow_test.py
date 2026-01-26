@@ -21,10 +21,12 @@ def test_get_user(db, created_user):
     assert fetched['data']['username'] == "marclikestocode"
     return fetched
 
-def test_update_user(db, created_user, new_data):
+def test_update_user(db, created_user):
     user_id = created_user['data']
-    updated = postgres.update_user(db, user_id=user_id, new_data=new_data)
+    updated = postgres.update_user(db, user_id=user_id, new_data={"email": "johnprok@nyu.edu"})
     assert updated['success'] is True
+    assert updated['data']['email'] == "johnprok@nyu.edu"
+    return updated
 
 def test_delete_user(db, created_user):
     user_id = created_user['data']
