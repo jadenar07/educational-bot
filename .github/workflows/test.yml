@@ -1,0 +1,51 @@
+name: Test PRs 
+
+on:
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+jobs:
+    test:
+      runs-on: ubuntu-latest
+
+      services:
+        postgres:
+          image: postgres:15
+          env:
+            POSTGRES_USER: ${{ secrets.POSTGRES_USER }}
+            POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
+            POSTGRES_DB: ${{ secrets.POSTGRES_DB }}
+          ports:
+            - 5432:5432
+          options: >-
+            --health-cmd="pg_isready -U ${{ secrets.POSTGRES_USER }}"
+            --health-interval=10s
+            --health-timeout=5s
+            --health-retries=5
+      steps:
+        - uses: actions/checkout@v3
+
+        - name: Set up Python
+          uses: actions/setup-python@v4
+          with:
+            python-version: '3.10'
+
+        - name: Install dependencies
+          run: |
+            python3 -m pip install --upgrade pip
+            python3 -m pip install flake8
+            pip install -r requirements.txt
+        
+        - name: Lint
+          run: |
+            flake8 src/
+
+        - name: Run postgres tests
+          env:
+            POSTGRES_USER: ${{secrets.POSTGRES_USER }}
+            POSTGRES_PASSWORD: ${{secrets.POSTGRES_PASSWORD }}
+            POSTGRES_DB: ${{secrets.POSTGRES_DB }}
+            POSTGRES_HOST: localhost
+            POSTGRES_PORT: 5432
+          run: pytest src/databases/postgres/crud_test.py -v
