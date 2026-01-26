@@ -23,7 +23,7 @@ jobs:
           ports:
             - 5432:5432
           options: >-
-            --health-cmd="pg_isready -U marc -d postgres"
+            --health-cmd="pg_isready -U marc"
             --health-interval=10s
             --health-timeout=5s
             --health-retries=5
@@ -40,15 +40,29 @@ jobs:
             python3 -m pip install --upgrade pip
             python3 -m pip install flake8
             pip install -r requirements.txt
+
+        - name: Debug env (safe)
+          run: |
+            echo "USER=$POSTGRES_USER"
+            echo "DB=$POSTGRES_DB"
+
         
         - name: Linting...
           run: flake8 src/ || true
+
+        - name: Wait for Postgres
+          run: |
+            for i in {1..10}; do
+              pg_isready -h 127.0.0.1 -p 5432 -U "$POSTGRES_USER" && break
+              sleep 2
+            done
+
 
         - name: Run postgres tests
           env:
             POSTGRES_USER: ${{secrets.POSTGRES_USER }}
             POSTGRES_PASSWORD: ${{secrets.POSTGRES_PASSWORD }}
             POSTGRES_DB: ${{secrets.POSTGRES_DB }}
-            POSTGRES_HOST: localhost
+            POSTGRES_HOST: 127.0.0.1
             POSTGRES_PORT: 5432
           run: pytest src/databases/postgres/crud_test.py -v
