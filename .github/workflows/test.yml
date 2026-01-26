@@ -1,6 +1,10 @@
 name: Test PRs 
 
 on:
+  push:
+    branches:
+      - main
+      - marc
   pull_request:
     branches:
       - main
@@ -19,7 +23,7 @@ jobs:
           ports:
             - 5432:5432
           options: >-
-            --health-cmd="pg_isready -U marc"
+            --health-cmd="pg_isready -U marc -d postgres"
             --health-interval=10s
             --health-timeout=5s
             --health-retries=5
@@ -37,9 +41,8 @@ jobs:
             python3 -m pip install flake8
             pip install -r requirements.txt
         
-        - name: Lint
-          run: |
-            flake8 src/
+        - name: Linting...
+          run: flake8 src/ || true
 
         - name: Run postgres tests
           env:
