@@ -1,5 +1,9 @@
 from crudPostgres import PostgresCRUD
 
+from dotenv import load_dotenv
+import os
+load_dotenv()
+
 postgres = PostgresCRUD()
 db = postgres.get_connection()
 
@@ -14,9 +18,9 @@ def update(db, id, data):
     return x
 
 def main():
-    update(db, "1", {"email": "johnprok@nyu.edu"})
-    print(test_get("1"))
-
+    #update(db, "1", {"email": "johnprok@nyu.edu"})
+    postgres.create_user(db, "slapitonme", "marcitoo@nyu.edu", "student")
+   
    
 main()
 

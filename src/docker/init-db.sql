@@ -9,3 +9,5 @@ CREATE TABLE IF NOT EXISTS profiles.users(
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
+CREATE INDEX idx_users_email ON profiles.users(email);
+CREATE INDEX idx_users_username ON profiles.users(username);
