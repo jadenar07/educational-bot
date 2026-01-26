@@ -1,4 +1,5 @@
 from crudPostgres import PostgresCRUD
+import pytest
 
 from dotenv import load_dotenv
 import os
@@ -19,7 +20,8 @@ def update(db, id, data):
 
 def main():
     #update(db, "1", {"email": "johnprok@nyu.edu"})
-    postgres.create_user(db, "slapitonme", "marcitoo@nyu.edu", "student")
+    #postgres.create_user(db, "slapitonme", "marcitoo@nyu.edu", "student")
+    print(test_get(4)['data']['username'])
    
    
 main()
