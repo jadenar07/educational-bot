@@ -65,4 +65,4 @@ jobs:
             POSTGRES_DB: ${{secrets.POSTGRES_DB }}
             POSTGRES_HOST: 127.0.0.1
             POSTGRES_PORT: 5432
-          run: pytest src/databases/postgres/crud_test.py -v
+          run: pytest src/databases/postgres/workflow_test.py -v
