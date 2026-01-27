@@ -15,11 +15,13 @@ jobs:
 
       services:
         postgres:
-          image: postgres:15
+          image: postgres:17
           env:
-            POSTGRES_USER: ${{ secrets.POSTGRES_USER }}
-            POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
-            POSTGRES_DB: ${{ secrets.POSTGRES_DB }}
+            POSTGRES_USER: marc
+            POSTGRES_PASSWORD: blarg223
+            POSTGRES_DB: ephemeraldb
+            POSTGRES_HOST: 127.0.0.1
+            POSTGRES_PORT: 5432
           ports:
             - 5432:5432
           volumes:
@@ -62,9 +64,9 @@ jobs:
 
         - name: Run postgres tests
           env:
-            POSTGRES_USER: ${{secrets.POSTGRES_USER }}
-            POSTGRES_PASSWORD: ${{secrets.POSTGRES_PASSWORD }}
-            POSTGRES_DB: ${{secrets.POSTGRES_DB }}
-            POSTGRES_HOST: 127.0.0.1
-            POSTGRES_PORT: 5432
+            POSTGRES_USER: ${{ env.POSTGRES_USER }}
+            POSTGRES_PASSWORD: ${{ env.POSTGRES_PASSWORD }}
+            POSTGRES_DB: ${{ env.POSTGRES_DB }}
+            POSTGRES_HOST: ${{ env.POSTGRES_HOST }}
+            POSTGRES_PORT: ${{ env.POSTGRES_PORT }}
           run: pytest src/databases/postgres/workflow_test.py -v
