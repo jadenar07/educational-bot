@@ -20,14 +20,12 @@ jobs:
             POSTGRES_USER: marc
             POSTGRES_PASSWORD: blarg223
             POSTGRES_DB: ephemeraldb
-            POSTGRES_HOST: 127.0.0.1
-            POSTGRES_PORT: 5432
           ports:
             - 5432:5432
           volumes:
             - ./src/databases/postgres/init-db.sql:/docker-entrypoint-initdb.d/init-db.sql
           options: >-
-            --health-cmd="pg_isready -U marc"
+            --health-cmd="pg_isready -U marc -d ephemeraldb"
             --health-interval=10s
             --health-timeout=5s
             --health-retries=5
@@ -61,12 +59,20 @@ jobs:
               sleep 2
             done
 
+        - name: Verify Schema
+          run: |
+            PGPASSWORD=$POSTGRES_PASSWORD psql \
+              -h 127.0.0.1 \
+              -p 5432 \
+              -U $POSTGRES_USER \
+              -d $POSTGRES_DB \
+              -c "\dt profiles.*"
 
         - name: Run postgres tests
           env:
-            POSTGRES_USER: ${{ env.POSTGRES_USER }}
-            POSTGRES_PASSWORD: ${{ env.POSTGRES_PASSWORD }}
-            POSTGRES_DB: ${{ env.POSTGRES_DB }}
-            POSTGRES_HOST: ${{ env.POSTGRES_HOST }}
-            POSTGRES_PORT: ${{ env.POSTGRES_PORT }}
+            POSTGRES_USER: marc
+            POSTGRES_PASSWORD: blarg223
+            POSTGRES_DB: ephemeraldb
+            POSTGRES_HOST: 127.0.0.1
+            POSTGRES_PORT: 5432
           run: pytest src/databases/postgres/workflow_test.py -v
