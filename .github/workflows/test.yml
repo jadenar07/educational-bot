@@ -22,8 +22,6 @@ jobs:
             POSTGRES_DB: ephemeraldb
           ports:
             - 5432:5432
-          volumes:
-            - src/docker/init-db.sql:/docker-entrypoint-initdb.d/init-db.sql
           options: >-
             --health-cmd="pg_isready -U marc -d ephemeraldb"
             --health-interval=10s
