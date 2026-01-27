@@ -1,7 +1,5 @@
 from crudPostgres import PostgresCRUD
 import pytest   
-from dotenv import load_dotenv
-load_dotenv()
 
 postgres = PostgresCRUD()
 
