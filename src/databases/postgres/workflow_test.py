@@ -10,11 +10,11 @@ def db():
 @pytest.fixture
 def created_user(db):
     created = postgres.create_user(db, "marclikestocode", "mw4725@nyu.edu", "student")
+    assert created['success'] is True
     return created
 
 def test_get_user(db, created_user):
-    user_id = created_user["data"]
-    fetched = postgres.get_user(db, user_id=user_id)
+    fetched = postgres.get_user(db, user_id=created_user['data'])
     assert fetched['success'] is True
     assert fetched['data']['username'] == "marclikestocode"
     return fetched
