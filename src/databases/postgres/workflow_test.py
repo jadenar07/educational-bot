@@ -9,6 +9,9 @@ def db():
 
 @pytest.fixture
 def created_user(db):
+    with db.cursor() as cur:
+         cur.execute("DELETE FROM profiles.users;")
+         db.commit()
     created = postgres.create_user(db, "marclikestocode", "mw4725@nyu.edu", "student")
     assert created['success'] is True
     return created
