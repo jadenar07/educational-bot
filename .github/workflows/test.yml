@@ -23,7 +23,7 @@ jobs:
           ports:
             - 5432:5432
           volumes:
-            - ./src/databases/postgres/init-db.sql:/docker-entrypoint-initdb.d/init-db.sql
+            - src/docker/init-db.sql:/docker-entrypoint-initdb.d/init-db.sql
           options: >-
             --health-cmd="pg_isready -U marc -d ephemeraldb"
             --health-interval=10s
@@ -60,13 +60,19 @@ jobs:
             done
 
         - name: Verify Schema
+          env:
+            POSTGRES_USER: marc
+            POSTGRES_PASSWORD: blarg223
+            POSTGRES_DB: ephemeraldb
+            POSTGRES_HOST: 127.0.0.1
+            POSTGRES_PORT: 5432
           run: |
             PGPASSWORD=$POSTGRES_PASSWORD psql \
               -h 127.0.0.1 \
               -p 5432 \
               -U $POSTGRES_USER \
               -d $POSTGRES_DB \
-              -c "\dt profiles.*"
+              -f src/docker/init-db.sql
 
         - name: Run postgres tests
           env:
