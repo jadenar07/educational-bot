@@ -1,32 +1,56 @@
 import psycopg2
+from psycopg2 import pool
 import os
 from psycopg2.extras import RealDictCursor #changes fetch returns to a dict
 from dotenv import load_dotenv
 import logging
 
-
+load_dotenv()
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 class PostgresCRUD():
-    def get_connection(self):
-        load_dotenv()
-        try:
-            connection = psycopg2.connect(
-                dbname = os.getenv("POSTGRES_DB"),
-                user = os.getenv("POSTGRES_USER"),
-                password = os.getenv("POSTGRES_PASSWORD"),
-                host = os.getenv("POSTGRES_HOST"),
+    _pool = None  # Class variable to store pool
+    
+    @classmethod
+    def init_pool(cls):
+        """Initialize connection pool once at startup"""
+        if cls._pool is None:
+            cls._pool = pool.SimpleConnectionPool(
+                1,  # Minimum 1 connection
+                20,  # Maximum 20 connections
+                dbname=os.getenv("POSTGRES_DB"),
+                user=os.getenv("POSTGRES_USER"),
+                password=os.getenv("POSTGRES_PASSWORD"),
+                host=os.getenv("POSTGRES_HOST"),
                 port=os.getenv("POSTGRES_PORT"),
                 cursor_factory=RealDictCursor
             )
-            logger.info("Database connection established")
+            logger.info("Connection pool initialized (1-20 connections)")
+    
+    def get_connection(self):
+        """Get connection from pool"""
+        self.init_pool()
+        try:
+            connection = self._pool.getconn()
+            logger.info("Got connection from pool")
             return connection
-        except psycopg2.Error as e: 
-            logger.error(f"Error connecting to database: {e}")
+        except pool.PoolError:
+            logger.error("No available connections in pool")
             raise
-
+    
+    @staticmethod
+    def return_connection(db):
+        """Return connection to pool"""
+        if PostgresCRUD._pool:
+            PostgresCRUD._pool.putconn(db)
+            logger.info("Returned connection to pool")
+    
     def create_user(self, db, username, email, role, default_collection=None):
+        valid_roles = {"ta", "student", "professor", "admin"}
+        if role not in valid_roles:
+            logger.error(f"Invalid role provided: {role}")
+            return {"success": False, "error": "Invalid role"}
         try:
             with db.cursor() as cur:
                 cur.execute("""
@@ -39,11 +63,12 @@ class PostgresCRUD():
                 logger.info(f"User created with ID: {user_id}")
                 return {"success": True, "message": "User created successfully!", "data": user_id}
         except psycopg2.Error as e:
-            logger.error(f" Error creating user: {e}")
+            logger.error(f"Error creating user: {e}")
             return {"success": False, "error": "User creation failed", "details": str(e)}
 
     def get_user(self, db, user_id: int | None = None, email: str | None = None, username: str | None = None):
         candidates = []
+        user = None
         allowed_fields = {"id", "email", "username"}
         if user_id is not None:
             candidates.append(("id", user_id))
@@ -105,6 +130,7 @@ class PostgresCRUD():
                 deleted = cur.fetchone()
                 db.commit()
                 if deleted is None:
+                    logger.warning(f"User with ID {user_id} not found for deletion") 
                     return {"success": False, "error": "User not found"}
                 logger.info(f"User with ID {user_id} deleted successfully")
             return {"success": True, "message": "User deleted successfully!", "data": deleted}
