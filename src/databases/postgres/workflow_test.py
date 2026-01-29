@@ -5,7 +5,9 @@ postgres = PostgresCRUD()
 
 @pytest.fixture
 def db():
-    return postgres.get_connection()
+    connection = postgres.get_connection()
+    yield connection
+    connection.close()
 
 @pytest.fixture
 def created_user(db):
@@ -20,14 +22,12 @@ def test_get_user(db, created_user):
     fetched = postgres.get_user(db, user_id=created_user['data'])
     assert fetched['success'] is True
     assert fetched['data']['username'] == "marclikestocode"
-    return fetched
 
 def test_update_user(db, created_user):
     user_id = created_user['data']
     updated = postgres.update_user(db, user_id=user_id, new_data={"email": "johnprok@nyu.edu"})
     assert updated['success'] is True
     assert updated['data']['email'] == "johnprok@nyu.edu"
-    return updated
 
 def test_delete_user(db, created_user):
     user_id = created_user['data']
