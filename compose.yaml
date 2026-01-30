@@ -1,0 +1,22 @@
+services:
+  postgres:
+    image: postgres:17
+    container_name: user-profiles-postgres
+    ports:
+      - "5432:5432"
+    env_file:
+      - .env
+    volumes:
+      - ./src/docker:/docker-entrypoint-initdb.d
+    restart: always
+  pgadmin:
+    image: dpage/pgadmin4
+    container_name: user-profiles-pgadmin
+    restart: always
+    environment:
+      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_DEFAULT_EMAIL}
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_DEFAULT_PASSWORD}
+    ports:
+      - "5050:80"
+    depends_on:
+      - postgres
