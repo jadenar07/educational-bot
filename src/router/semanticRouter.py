@@ -11,9 +11,21 @@ from backend.modelsPydantic import QueryRequest
 from database.modelsChroma import generate_embedding
 from services.queryLangchain import fetchGptResponse
 from router.utterances import UTTERANCES
+from fastapi import HTTPException
+
 
 # Logging
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
+ROLE_ROUTES = {
+    "student":["course_materials", "mental_support"],
+    "professor":["course_materials","teaching_support"]
+}
+
+PROFILE_ROUTES_MAP={
+    "course_materials":["material_info_rt"],
+    "teaching_support":["progress_report","problem_solve_rt"],
+    "mental_support":["mental_support_rt"]
+}
 
 class SemanticRouter:
     def __init__(self, crud):
@@ -22,49 +34,79 @@ class SemanticRouter:
         # Set up variables
         self.crud = crud
         self.encoder = LocalEncoder()
-        self._setup_routes()
-        
-    def _setup_routes(self):
-        """Initialize routes and route layer"""
-        # Route definitions and their utterances
+        # self._setup_routes()
+
+        # Define all possible route responses
+        self.route_responses = {
+            "material_info_rt": self.material_info_guidance,
+            "progress_report": self.progress_report_guidance,
+            "problem_solve_rt": self.problem_solve_guidance,
+            "mental_support_rt": self.mental_support_guidance,
+        }
+
+        self.route_layer_cache = {} # Cache for route layers per role
+        self.response_map_cache = {} # Cache for response maps per role
+
+        logging.info("Initializing and caching routers...") # Build and cache routers
+        for role in ROLE_ROUTES.keys(): 
+            self._setup_routes(role)
+        logging.info("All routers built and cached.")
+
+    # Set up routes based on role     
+    def _setup_routes(self, role: str):
         self.progress_report_rt = Route(
             name="progress_report",
             utterances=UTTERANCES["progress_report"],
         )
 
         self.problem_solve_rt = Route(
-            name="problem_solve",
+            name="problem_solve_rt",
             utterances=UTTERANCES["problem_solve"],
         )
 
         self.material_info_rt = Route(
-            name="material_info",
+            name="material_info_rt",
             utterances=UTTERANCES["material_info"],
         )
 
         self.mental_support_rt = Route(
-            name="mental_support",
+            name="mental_support_rt",
             utterances=UTTERANCES["mental_support"],
         )
-
-        # Define Route Layer
-        self.route_layer = AurelioSemanticRouter(encoder=self.encoder, routes=[
-            self.progress_report_rt,
-            self.problem_solve_rt,
-            self.material_info_rt,
-            self.mental_support_rt,
-        ], auto_sync="local")
-
+        profiles= ROLE_ROUTES.get(role,[]) # Get profiles for the role
+        # If no profiles found, raise exception
+        if not profiles:
+            raise HTTPException(status_code = 403, detail=f"No profiles found for role '{role}'")
         
-        # Setup response mapping
-        self.route_responses = {
-            "progress_report": self.progress_report_guidance,
-            "problem_solve": self.problem_solve_guidance,
-            "material_info": self.material_info_guidance,
-            "mental_support": self.mental_support_guidance,
-            "fallback": self.fallback_response,
+        # Determine allowed routes based on profiles
+        allowed_route_names=set()
+        for p in profiles:
+            allowed_route_names.update(PROFILE_ROUTES_MAP.get(p,[]))
+
+        # Build allowed routes list
+        allowed_routes=[]
+        for route_name in allowed_route_names:
+            route_object=getattr(self, route_name, None)
+            if route_object:
+                allowed_routes.append(route_object)
+
+        # Build the route layer 
+        route_layer=AurelioSemanticRouter( 
+            encoder=self.encoder,
+            routes=allowed_routes,
+            auto_sync="local"
+        )
+        # Filter route responses based on allowed routes
+        filtered_responses = { 
+            name: func for name, func in self.route_responses.items() 
+            if name in allowed_route_names 
         }
-    
+        self.route_layer_cache[role] = route_layer
+        self.response_map_cache[role] = filtered_responses
+        
+        logging.info(f"Routes cached for role '{role}': {list(filtered_responses.keys())}")
+
+       
     # Response functions
     async def progress_report_guidance(self, request=None):
         return "Tracking your submitted labs and reviewing feedback will help ensure steady progress."
@@ -95,12 +137,26 @@ class SemanticRouter:
         logging.info(f"Answer: {answer}")
         return {'answer': answer}
 
-    async def process_query(self, request: QueryRequest):
+    async def process_query(self, request: QueryRequest, role: str = None):
         """Main entry point to process a query through the semantic router"""
         try:
-            route = self.route_layer(request.query)
+            if role is None:
+                # Try to infer role from the request object, if available
+                role = getattr(request, "role", None) or getattr(request, "user_role", None)
+            # If we still don't have a role, return a clear error instead of failing later
+            if role is None:
+                logging.warning("process_query called without a role and no role could be inferred from the request.")
+                raise HTTPException(status_code=400, detail="Role is required to process the query.")
+            # Get the cached route layer and response map for the role
+            route_layer = self.route_layer_cache.get(role)
+            route_responses = self.response_map_cache.get(role)
+            # Check if the role is valid and has a router
+            if not route_layer or not route_responses:
+                logging.warning(f"No router configured for role '{role}'.")
+                raise HTTPException(status_code=403, detail=f"Role '{role}' does not have any configured routes.")
+            
+            route = route_layer(request.query)
 
-            # Log the processed route details
             logging.info(f"Processed route: {route}")
 
             if hasattr(route, 'name') and route.name:
