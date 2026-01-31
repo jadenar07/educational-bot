@@ -8,7 +8,6 @@ import logging
 from fastapi import FastAPI, HTTPException  
 from backend.middleware.role_middleware import RoleMiddleware
 from starlette.requests import Request
-from router.semanticRouter import SemanticRouter  # adjust import
 
 # from router.semanticRouter import process_query
 from router.semanticRouter import create_router
@@ -31,12 +30,6 @@ crud = CRUD()
 semantic_router = create_router(crud)
 app.add_middleware(RoleMiddleware, audience="your-audience")
 
-app = FastAPI()
-crud = CRUD()
-semantic_router = create_router(crud)  # returns your SemanticRouter instance
-
-app.add_middleware(RoleMiddleware, audience="your-audience")
-
 @app.post('/channel_query') #, response_model=QueryResponse
 async def channel_query(request: QueryRequest):
     try:
@@ -51,7 +44,7 @@ async def channel_query(request: QueryRequest):
         logging.info(f"Relevant messages: {content}")
         logging.info(f"Channel info: {data}")
 
-        # combine the relevant messages and channel infoF
+        # combine the relevant messages and channel info
         combined_data = {
             'relevant_messages': content,
             'channel_info': channel_info

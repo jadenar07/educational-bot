@@ -137,19 +137,24 @@ class SemanticRouter:
         logging.info(f"Answer: {answer}")
         return {'answer': answer}
 
-    async def process_query(self, request: QueryRequest, role: str):
+    async def process_query(self, request: QueryRequest, role: str = None):
         """Main entry point to process a query through the semantic router"""
         try:
+            if role is None:
+                # Try to infer role from the request object, if available
+                role = getattr(request, "role", None) or getattr(request, "user_role", None)
+            # If we still don't have a role, return a clear error instead of failing later
+            if role is None:
+                logging.warning("process_query called without a role and no role could be inferred from the request.")
+                raise HTTPException(status_code=400, detail="Role is required to process the query.")
             # Get the cached route layer and response map for the role
             route_layer = self.route_layer_cache.get(role)
             route_responses = self.response_map_cache.get(role)
-
             # Check if the role is valid and has a router
             if not route_layer or not route_responses:
                 logging.warning(f"No router configured for role '{role}'.")
                 raise HTTPException(status_code=403, detail=f"Role '{role}' does not have any configured routes.")
-
-    
+            
             route = route_layer(request.query)
 
             logging.info(f"Processed route: {route}")
