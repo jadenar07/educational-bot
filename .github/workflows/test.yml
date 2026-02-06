@@ -1,82 +1,51 @@
-name: Test PR 
+name: Test PRs
 
 on:
-  push:
-    branches:
-      - main
-      - marc
   pull_request:
     branches:
       - main
   workflow_dispatch:
 jobs:
-    postgres_tests:
-      runs-on: ubuntu-latest
+  test:
+    runs-on: ubuntu-latest
 
-      services:
-        postgres:
-          image: postgres:17
-          env:
-            POSTGRES_USER: marc
-            POSTGRES_PASSWORD: blarg223
-            POSTGRES_DB: ephemeraldb
-          ports:
-            - 5432:5432
-          options: >-
-            --health-cmd="pg_isready -U marc -d ephemeraldb"
-            --health-interval=10s
-            --health-timeout=5s
-            --health-retries=5
-      steps:
-        - uses: actions/checkout@v3
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_USER: ${{ secrets.POSTGRES_USER }}
+          POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
+          POSTGRES_DB: ${{ secrets.POSTGRES_DB }}
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U ${{ secrets.POSTGRES_USER }}"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
+    steps:
+      - uses: actions/checkout@v3
 
-        - name: Set up Python
-          uses: actions/setup-python@v4
-          with:
-            python-version: '3.10'
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.10"
 
-        - name: Install dependencies
-          run: |
-            python3 -m pip install --upgrade pip
-            python3 -m pip install flake8
-            pip install -r requirements.txt
+      - name: Install dependencies
+        run: |
+          python3 -m pip install --upgrade pip
+          python3 -m pip install flake8
+          pip install -r requirements.txt
 
-        - name: Debug env (safe)
-          run: |
-            echo "USER=$POSTGRES_USER"
-            echo "DB=$POSTGRES_DB"
+      - name: Lint
+        run: |
+          flake8 src/
 
-        
-        - name: Linting...
-          run: flake8 src/ || true
-
-        - name: Wait for Postgres
-          run: |
-            for i in {1..10}; do
-              pg_isready -h 127.0.0.1 -p 5432 -U "$POSTGRES_USER" && break
-              sleep 2
-            done
-
-        - name: Verify Schema
-          env:
-            POSTGRES_USER: marc
-            POSTGRES_PASSWORD: blarg223
-            POSTGRES_DB: ephemeraldb
-            POSTGRES_HOST: 127.0.0.1
-            POSTGRES_PORT: 5432
-          run: |
-            PGPASSWORD=$POSTGRES_PASSWORD psql \
-              -h 127.0.0.1 \
-              -p 5432 \
-              -U $POSTGRES_USER \
-              -d $POSTGRES_DB \
-              -f src/docker/init-db.sql
-
-        - name: Run postgres tests
-          env:
-            POSTGRES_USER: marc
-            POSTGRES_PASSWORD: blarg223
-            POSTGRES_DB: ephemeraldb
-            POSTGRES_HOST: 127.0.0.1
-            POSTGRES_PORT: 5432
-          run: pytest src/databases/postgres/workflow_test.py -v
+      - name: Run postgres tests
+        env:
+          POSTGRES_USER: ${{secrets.POSTGRES_USER }}
+          POSTGRES_PASSWORD: ${{secrets.POSTGRES_PASSWORD }}
+          POSTGRES_DB: ${{secrets.POSTGRES_DB }}
+          POSTGRES_HOST: localhost
+          POSTGRES_PORT: 5432
+        run: pytest src/databases/postgres/crud_test.py -v
