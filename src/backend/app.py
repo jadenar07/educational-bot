@@ -189,7 +189,6 @@ async def update_info(request: Union[UpdateGuildInfo, UpdateChannelInfo, UpdateM
     logging.info(f"Info updated for {collection_name}")
     return {"status": "Update complete"}
 
-# likely don't need
 @app.post('/collections')
 async def create_collection(payload: CollectionCreate):
     name = payload.name
@@ -259,7 +258,7 @@ async def load_course_materials():
     file_path = "./data/pdf_files"
     collection_name = "course_materials"
     try:
-        data = await crud.save_pdfs(file_path, collection_name)
+        data = await crud.save_pdfs(file_path, collection_name) 
 
         # save the data to the database in chunks of ten documents
         chunk_size = 10
