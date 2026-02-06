@@ -23,6 +23,9 @@ from database.modelsChroma import (
 )
 from utlis.prompts import PROMPTS
 
+sys.path.append(os.path.join(os.path.dirname(__file__), 'src'))
+
+
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 
 app = FastAPI()
@@ -188,6 +191,11 @@ async def create_collection(payload: CollectionCreate):
     name = payload.name
     if not name:
         raise HTTPException(status_code=400, detail="Missing 'name'")
+    if not all(ch.isalnum() or ch in "_-" for ch in name):
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid collection name. Only letters, numbers, underscores, and hyphens are allowed.",
+        )
     description = payload.description if payload.description is not None else ""
     metadata = payload.metadata if payload.metadata is not None else {}
     result = await crud.create_collection(
