@@ -333,7 +333,7 @@ class DiscordBot:
 
         if response.status_code == 200:
             response_json = response.json()
-            logging.info("JSON response inside handle query",response_json)
+            logging.info("JSON response inside handle query: %s", response_json)
             answer = response_json.get('answer', {})
             if isinstance(answer, str):
                 result = answer
