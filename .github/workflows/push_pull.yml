@@ -96,4 +96,4 @@ jobs:
             pip install -r requirements.txt
 
         - name: Run chroma tests
-          run: pytest src/databases/chroma/chroma_test.py -v
+          run: pytest src/databases/chroma/chroma_tests.py -v
