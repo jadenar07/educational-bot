@@ -82,6 +82,10 @@ jobs:
           run: pytest src/databases/postgres/workflow_test.py -v
     chroma_tests:
       runs-on: ubuntu-latest
+      env:
+            PROFANITY_THRESHOLD: 0.7
+            DISTANCE_THRESHOLD: 0.25
+            DB_PATH: ./local_chromadb
       steps:
         - uses: actions/checkout@v3
 
