@@ -31,7 +31,7 @@ jobs:
           - uses: actions/checkout@v3
 
           - name: Download cleaned requirements
-            uses: actions/download-artifact@v3
+            uses: actions/download-artifact@v4
             with:
               name: cleaned-requirements
 
@@ -77,7 +77,7 @@ jobs:
       steps:
         - uses: actions/checkout@v3
         - name: Download cleaned requirements
-          uses: actions/download-artifact@v3
+          uses: actions/download-artifact@v4
           with:
             name: cleaned-requirements
         - name: Use cleaned requirements
@@ -163,7 +163,7 @@ jobs:
             echo "Copying cleaned requirements for artifact upload..."
             cp src/requirements.txt requirements_cleaned.txt
         - name: Upload cleaned requirements
-          uses: actions/upload-artifact@v3
+          uses: actions/upload-artifact@v4
           with:
             name: cleaned-requirements
             path: requirements_cleaned.txt
