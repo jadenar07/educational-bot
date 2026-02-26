@@ -105,10 +105,11 @@ jobs:
             pip install pipreqs
         - name: Clean up w/ pipreqs
           run: |
-            WORKING_DIR=$(pwd)
-            echo "Working dir: $WORKING_DIR"
-            echo "Working dir: $WORKING_DIR/src"
-            ls -la "$WORKING_DIR/src" || echo "src not found!"
-            pip show pipreqs || pip install pipreqs
-            pipreqs --force --verbose "$WORKING_DIR/src" 
-            diff -u requirements.txt "$WORKING_DIR/src/requirements.txt" || true
+            echo "Current directory: $(pwd)"
+            echo "Contents of src:"
+            ls -la src/
+            echo "Running pipreqs..."
+            pipreqs --force src/ 2>&1 || echo "pipreqs failed with exit code: $?"
+            echo "Generated files:"
+            find . -name "requirements.txt" -type f
+            diff -u requirements.txt src/requirements.txt || true
