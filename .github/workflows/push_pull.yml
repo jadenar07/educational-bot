@@ -1,4 +1,4 @@
-name: Test PR 
+name: Push and Pull Request Workflow
 
 on:
   push:
@@ -86,6 +86,7 @@ jobs:
             PROFANITY_THRESHOLD: 0.7
             DISTANCE_THRESHOLD: 0.25
             DB_PATH: ./local_chromadb
+            DISCORD_TOKEN: ${{ secrets.DISCORD_TOKEN }}
       steps:
         - uses: actions/checkout@v3
 
