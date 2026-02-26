@@ -106,5 +106,5 @@ jobs:
         - name: Clean up w/ pipreqs
           run: |
             pip install pipreqs
-            pipreqs --force --verbose src/
+            pipreqs --force --verbose ./src
             diff -u requirements.txt src/requirements.txt || true
