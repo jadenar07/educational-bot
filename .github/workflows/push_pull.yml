@@ -20,8 +20,32 @@ on:
           - postgres_tests
           - cleanup
 jobs:
+    chroma_tests:
+        runs-on: ubuntu-latest
+        needs: cleanup
+        env:
+              PROFANITY_THRESHOLD: 0.7
+              DISTANCE_THRESHOLD: 0.25
+              DB_PATH: ./local_chromadb
+              DISCORD_TOKEN: ${{ secrets.DISCORD_TOKEN }}
+        steps:
+          - uses: actions/checkout@v3
+
+          - name: Set up Python
+            uses: actions/setup-python@v4
+            with:
+              python-version: '3.10.12'
+
+          - name: Install dependencies
+            run: |
+              python3 -m pip install --upgrade pip
+              pip install -r requirements.txt
+
+          - name: Run chroma tests
+            run: pytest src/databases/chroma/chroma_tests.py -v
     postgres_tests:
       runs-on: ubuntu-latest
+      needs: cleanup
 
       services:
         postgres:
