@@ -30,6 +30,20 @@ jobs:
         steps:
           - uses: actions/checkout@v3
 
+          - name: Download cleaned requirements
+            uses: actions/download-artifact@v3
+            with:
+              name: cleaned-requirements
+
+          - name: Use cleaned requirements
+            run: |
+              echo "Current directory: $(pwd)"
+              echo "Downloaded files:"
+              ls -la requirements_cleaned.txt
+              cp requirements_cleaned.txt requirements.txt
+              echo "Using cleaned requirements:"
+              cat requirements.txt
+
           - name: Set up Python
             uses: actions/setup-python@v4
             with:
@@ -62,7 +76,18 @@ jobs:
             --health-retries=5
       steps:
         - uses: actions/checkout@v3
-
+        - name: Download cleaned requirements
+          uses: actions/download-artifact@v3
+          with:
+            name: cleaned-requirements
+        - name: Use cleaned requirements
+          run: |
+            echo "Current directory: $(pwd)"
+            echo "Downloaded files:"
+            ls -la requirements_cleaned.txt
+            cp requirements_cleaned.txt requirements.txt
+            echo "Using cleaned requirements:"
+            cat requirements.txt
         - name: Set up Python
           uses: actions/setup-python@v4
           with:
@@ -71,7 +96,6 @@ jobs:
         - name: Install dependencies
           run: |
             python3 -m pip install --upgrade pip
-            python3 -m pip install flake8
             pip install -r requirements.txt
 
         - name: Debug env (safe)
@@ -117,7 +141,6 @@ jobs:
       runs-on: ubuntu-latest
       steps:
         - uses: actions/checkout@v3
-
         - name: Setup Python
           uses: actions/setup-python@v4
           with:
@@ -135,4 +158,12 @@ jobs:
             pipreqs --force src/ 2>&1 || echo "pipreqs failed with exit code: $?"
             echo "Generated files:"
             find . -name "requirements.txt" -type f
+            echo "Comparing original vs cleaned requirements:"
             diff -u requirements.txt src/requirements.txt || true
+            echo "Copying cleaned requirements for artifact upload..."
+            cp src/requirements.txt requirements_cleaned.txt
+        - name: Upload cleaned requirements
+          uses: actions/upload-artifact@v3
+          with:
+            name: cleaned-requirements
+            path: requirements_cleaned.txt
