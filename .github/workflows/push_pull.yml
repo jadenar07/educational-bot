@@ -4,7 +4,7 @@ on:
   push:
     branches:
       - main
-      - marc
+      - ci-development
   pull_request:
     branches:
       - main
@@ -105,6 +105,10 @@ jobs:
             pip install pipreqs
         - name: Clean up w/ pipreqs
           run: |
-            pip install pipreqs
-            pipreqs --force --verbose ./src
-            diff -u requirements.txt src/requirements.txt || true
+            WORKING_DIR=$(pwd)
+            echo "Working dir: $WORKING_DIR"
+            echo "Working dir: $WORKING_DIR/src"
+            ls -la "$WORKING_DIR/src" || echo "src not found!"
+            pip show pipreqs || pip install pipreqs
+            pipreqs --force --verbose "$WORKING_DIR/src" 
+            diff -u requirements.txt "$WORKING_DIR/src/requirements.txt" || true
