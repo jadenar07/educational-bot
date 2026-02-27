@@ -148,20 +148,20 @@ jobs:
         - name: Install cleaner tools
           run: |
             python3 -m pip install --upgrade pip
-            pip install pipreqs
-        - name: Clean up w/ pipreqs
+            pip install pip-tools
+        - name: Clean up w/ pip-tools
           run: |
             echo "Current directory: $(pwd)"
             echo "Contents of src:"
             ls -la src/
-            echo "Running pipreqs..."
-            pipreqs --force src/ 2>&1 || echo "pipreqs failed with exit code: $?"
+            echo "Analyzing current requirements.txt..."
+            echo "Running pip-compile to generate optimized requirements..."
+            pip-compile requirements.txt --output-file=requirements_cleaned.txt 2>&1 || echo "pip-compile failed, using original"
             echo "Generated files:"
-            find . -name "requirements.txt" -type f
+            find . -name "requirements*.txt" -type f
             echo "Comparing original vs cleaned requirements:"
-            diff -u requirements.txt src/requirements.txt || true
-            echo "Copying cleaned requirements for artifact upload..."
-            cp src/requirements.txt requirements_cleaned.txt
+            diff -u requirements.txt requirements_cleaned.txt || true
+            echo "Requirements analysis complete, preparing for artifact upload..."
         - name: Upload cleaned requirements
           uses: actions/upload-artifact@v4
           with:

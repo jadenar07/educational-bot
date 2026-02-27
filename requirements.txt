@@ -7,7 +7,6 @@ annotated-types==0.7.0
 anyio==4.6.2.post1
 appdirs==1.4.4
 asgiref==3.8.1
-Aspose.Slides==24.10.0
 async-timeout==4.0.3
 asyncio==3.4.3
 attrs==24.2.0
