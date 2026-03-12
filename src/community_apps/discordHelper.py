@@ -1,7 +1,7 @@
 import os, json, httpx, discord, logging
 import numpy as np 
 from profanity_check import predict_prob
-from database.modelsChroma import (
+from databases.chroma.modelsChroma import (
     GuildInfo, ChannelInfo, MemberInfoChannel
 )
 from services.nlpTools import TextProcessor
