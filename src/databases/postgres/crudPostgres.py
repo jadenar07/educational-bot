@@ -46,6 +46,22 @@ class PostgresCRUD():
             PostgresCRUD._pool.putconn(db)
             logger.info("Returned connection to pool")
     
+    async def ping(self):
+        """Simple health check - tests database connectivity."""
+        db = None
+        try:
+            db = self.get_connection()
+            with db.cursor() as cur:
+                cur.execute("SELECT 1;")
+                cur.fetchone()
+            return True
+        except Exception as e:
+            logger.error(f"Postgres ping failed: {e}")
+            raise
+        finally:
+            if db:
+                self.return_connection(db)
+    
     def create_user(self, db, username, email, role, default_collection=None):
         valid_roles = {"ta", "student", "professor", "admin"}
         if role not in valid_roles:

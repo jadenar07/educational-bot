@@ -1,7 +1,7 @@
-import os, json, httpx, discord, logging
+import os, json, httpx, discord, logging, time
 import numpy as np 
 from profanity_check import predict_prob
-from database.modelsChroma import (
+from databases.chroma.modelsChroma import (
     GuildInfo, ChannelInfo, MemberInfoChannel
 )
 from services.nlpTools import TextProcessor
@@ -15,6 +15,40 @@ async def send_to_app(route, data):
     async with httpx.AsyncClient(timeout=60.0) as client:
         response = await client.post(f'http://localhost:8000/{route}', json=data)
     return response
+
+async def check_api_health(timeout: float = 10.0) -> dict:
+    start_time = time.time()
+    try:
+        async with httpx.AsyncClient(timeout=timeout) as client:
+            response = await client.get('http://localhost:8000/health')
+            latency_ms = round((time.time() - start_time) * 1000, 2)
+            
+            if response.status_code == 200:
+                data = response.json()
+                data["latency_ms"] = latency_ms
+                return data
+            else:
+                return {
+                    "status": "error",
+                    "error": f"HTTP {response.status_code}",
+                    "latency_ms": latency_ms
+                }
+    except httpx.TimeoutException:
+        return {
+            "status": "down",
+            "error": "Request timed out",
+            "latency_ms": round((time.time() - start_time) * 1000, 2)
+        }
+    except httpx.ConnectError:
+        return {
+            "status": "down",
+            "error": "Connection refused - backend unreachable"
+        }
+    except Exception as e:
+        return {
+            "status": "down",
+            "error": str(e)
+        }
 
 async def update_message(all_messages, bot_user, chunk_size=25):
     for channel_id, messages in all_messages.items():
@@ -124,6 +158,7 @@ async def available_commands():
         "4. /setup - Use ONLY ONE time to setup chat history and server information. \n"
         "5. /load_course_materials - use ONLY ONE time to load course materials from course website\n"
         "6. /remove - Remove bot from channel\n"
+        "7. /bot_status - Check backend health and connectivity\n"
     )
     return commands
 
