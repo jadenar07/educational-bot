@@ -1,6 +1,7 @@
 # modelsPydantic.py
-from pydantic import BaseModel
-from typing import List, Dict, Optional
+from datetime import datetime
+from pydantic import BaseModel, Field
+from typing import List, Dict, Optional, Any
 
 class QueryRequest(BaseModel):
     guild_id: int
@@ -56,4 +57,30 @@ class UpdateChannelList(BaseModel):
     user_name: str
     guild_id: int
     channel_ids: List[int]
-    
+
+
+# Bot Models 
+class BotHandshakeRequest(BaseModel):
+    bot_id: str #incase instance id has words in it
+    version: str
+    capabilities: List[str] 
+    shared_secret: str
+
+
+class BotHandshakeResponse(BaseModel):
+    session_token: str
+    expires_at: datetime
+    interval: int
+    flags: Dict[str, bool] = Field(default_factory=dict)
+
+
+class BotHeartbeatRequest(BaseModel):
+    bot_id: str
+    latency: float
+    stats: Optional[Dict[str, Any]] = None
+
+
+class BotHeartbeatResponse(BaseModel):
+    bot_id: str
+    flags: Dict[str, bool] = Field(default_factory=dict)
+    required_version: Optional[str] = None
