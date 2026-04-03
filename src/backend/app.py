@@ -12,6 +12,8 @@ from backend.modelsPydantic import (
     QueryResponse, QueryRequest, UpdateChannelInfo, UpdateChatHistory, 
     UpdateGuildInfo, UpdateMemberInfo, UpdateChannelList
 )
+from backend.botRouter import router as bot_router, session_manager
+from backend.botMiddleware import BotSessionMiddleware
 from services.queryLangchain import fetchGptResponse
 from services.nlpTools import TextProcessor
 from database.crudChroma import CRUD
@@ -23,6 +25,9 @@ from utlis.prompts import PROMPTS
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 
 app = FastAPI()
+app.add_middleware(BotSessionMiddleware, session_manager=session_manager)
+app.include_router(bot_router)
+
 crud = CRUD()
 semantic_router = create_router(crud)
 
