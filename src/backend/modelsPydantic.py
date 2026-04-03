@@ -70,17 +70,35 @@ class BotHandshakeRequest(BaseModel):
 class BotHandshakeResponse(BaseModel):
     session_token: str
     expires_at: datetime
-    interval: int
+    interval: int  # recommended heartbeat interval in seconds
     flags: Dict[str, bool] = Field(default_factory=dict)
 
-
+# bot heartbeat model request
 class BotHeartbeatRequest(BaseModel):
     bot_id: str
     latency: float
     stats: Optional[Dict[str, Any]] = None
 
-
+# bot heartbeat model resposne
 class BotHeartbeatResponse(BaseModel):
     bot_id: str
     flags: Dict[str, bool] = Field(default_factory=dict)
     required_version: Optional[str] = None
+
+
+# error codes for handshake/heartbeat failures
+class BotProtocolErrorCode:
+    INVALID_SECRET = "INVALID_SECRET"
+    SESSION_EXPIRED = "SESSION_EXPIRED"
+    SESSION_REVOKED = "SESSION_REVOKED"
+    INVALID_SESSION_TOKEN = "INVALID_SESSION_TOKEN"
+    BOT_VERSION_MISMATCH = "BOT_VERSION_MISMATCH"
+    API_MAINTENANCE = "API_MAINTENANCE"
+    API_UNAVAILABLE = "API_UNAVAILABLE"
+    HEARTBEAT_TIMEOUT = "HEARTBEAT_TIMEOUT"
+
+# the reponse model for errors in the bot protocol
+class BotProtocolErrorResponse(BaseModel):
+    error_code: str
+    message: str
+    retry_after: Optional[int] = None
