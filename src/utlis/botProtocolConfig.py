@@ -3,6 +3,7 @@ import os
 
 SESSION_TTL = timedelta(minutes=10)
 HEARTBEAT_INTERVAL = 30 
+#should definitely change fallback secret 
 BOT_SHARED_SECRET = os.getenv("BOT_SHARED_SECRET", "fallback-secret")
 
 FLAGS = {

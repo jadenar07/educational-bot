@@ -38,16 +38,18 @@ class SessionManager:
         return self.sessions.get(token)
 
 
-    def validate_session(self, token: str) -> bool:
+    def validate_session(self, token: str) -> str:
         session = self.get_session(token)
 
-        if not session or session.revoked:
-            return False
+        if not session:
+            return "invalid"
+        if session.revoked:
+            return "revoked"
         if session.expires_at < datetime.now():
             self.sessions.pop(token, None)
-            return False
+            return "expired"
 
-        return True
+        return "valid"
 
 
     def revoke_session(self, token: str):

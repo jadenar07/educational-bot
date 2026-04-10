@@ -25,7 +25,15 @@ class BotSessionMiddleware(BaseHTTPMiddleware):
                     "message": "Missing x-bot-session header",
                 })
             
-            if not self.session_manager.validate_session(x_bot_session):
+            session_status = self.session_manager.validate_session(x_bot_session)
+            if session_status == "revoked":
+                logger.warning(f"Revoked session for path={path}")
+                return JSONResponse(status_code=401, content={
+                    "error_code": BotProtocolErrorCode.SESSION_REVOKED,
+                    "message": "Session has been revoked. Re-handshake required.",
+                })
+            
+            if session_status != "valid":
                 logger.warning(f"Invalid/expired session for path={path}")
                 return JSONResponse(status_code=401, content={
                     "error_code": BotProtocolErrorCode.SESSION_EXPIRED,

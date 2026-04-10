@@ -49,11 +49,21 @@ async def handshake(request: BotHandshakeRequest):
 @router.post("/bot/heartbeat", response_model=BotHeartbeatResponse)
 async def heartbeat(request: BotHeartbeatRequest, x_bot_session: str = Header(...)):
 
-    if not session_manager.validate_session(x_bot_session):
+    session_status = session_manager.validate_session(x_bot_session)
+
+    if session_status == "revoked":
+        logger.warning(f"Heartbeat rejected: revoked session for bot_id={request.bot_id}")
+
+        raise HTTPException(status_code=401, detail=BotProtocolErrorResponse(
+            error_code=BotProtocolErrorCode.SESSION_REVOKED,
+            message="Session has been revoked. Re-handshake required.",
+        ).model_dump())
+
+    if session_status != "valid":
         logger.warning(f"Heartbeat rejected: invalid session for bot_id={request.bot_id}")
 
         raise HTTPException(status_code=401, detail=BotProtocolErrorResponse(
-            error_code=BotProtocolErrorCode.INVALID_SESSION_TOKEN,
+            error_code=BotProtocolErrorCode.SESSION_EXPIRED,
             message="Session invalid or expired. Re-handshake required.",
         ).model_dump())
 
