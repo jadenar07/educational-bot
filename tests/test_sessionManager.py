@@ -42,6 +42,9 @@ def test_create_session_unique_tokens(manager):
     t1 = manager.create_session("bot-1", "1.0.0", [])
     t2 = manager.create_session("bot-1", "1.0.0", [])
     assert t1 != t2
+    # rehandshake revokes the old session
+    assert manager.get_session(t1).revoked is True
+    assert manager.get_session(t2).revoked is False
 
 
 def test_get_session_returns_none_for_unknown_token(manager):
@@ -54,22 +57,22 @@ def test_get_session_returns_correct_session(manager, token):
     assert session.bot_id == "bot-1"
 
 def test_validate_session_valid_token(manager, token):
-    assert manager.validate_session(token) is True
+    assert manager.validate_session(token) == "valid"
 
 
 def test_validate_session_unknown_token(manager):
-    assert manager.validate_session("bad-token") is False
+    assert manager.validate_session("bad-token") == "invalid"
 
 
 def test_validate_session_revoked_token(manager, token):
     manager.revoke_session(token)
-    assert manager.validate_session(token) is False
+    assert manager.validate_session(token) == "revoked"
 
 
 def test_validate_session_expired_token(short_manager):
     token = short_manager.create_session("bot-1", "1.0.0", [])
     import time; time.sleep(1.1)
-    assert short_manager.validate_session(token) is False
+    assert short_manager.validate_session(token) == "expired"
     assert short_manager.get_session(token) is None
 
 def test_revoke_session(manager, token):
