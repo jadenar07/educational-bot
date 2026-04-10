@@ -25,6 +25,11 @@ class SessionManager:
 
 
     def create_session(self, bot_id: str, version: str, capabilities: list[str]) -> str:
+        # revoke any existing session for this bot_id to prevent multiple active sessions per bot
+        for token, session in list(self.sessions.items()):
+            if session.bot_id == bot_id and not session.revoked:
+                session.revoked = True
+
         expires_at = datetime.now() + self.session_ttl
         session = SessionData(bot_id=bot_id, version=version, capabilities=capabilities, expires_at=expires_at)
         
