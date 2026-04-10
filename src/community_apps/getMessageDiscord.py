@@ -9,6 +9,7 @@ from community_apps.discordHelper import (
     store_guild_info, store_channel_info, store_member_info, store_channel_list, get_parameters,
     profanity_checker
 )
+from community_apps.botControlPlane import control_plane, BotState
 from backend.modelsPydantic import Message, UpdateChatHistory
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
@@ -26,6 +27,14 @@ class DiscordBot:
         async def on_ready():
             await self.tree.sync()
             logging.info(f'We have logged in as {self.bot.user}')
+
+            # startup handshake to establish session and start heartbeat loop
+            success = await control_plane.handshake()
+            if success:
+                control_plane.start_heartbeat()
+                logging.info("Control plane connected and heartbeat started")
+            else:
+                logging.error("Control plane handshake failed: bot running in OFFLINE mode")
 
         @self.bot.event
         async def on_message(message):
@@ -60,6 +69,9 @@ class DiscordBot:
 
         @self.tree.command(name="setup", description="Use ONCE to set up the server information and update chat history")
         async def setup(interaction: discord.Interaction):
+            if not control_plane.is_command_allowed():
+                await interaction.response.send_message("Bot is currently unavailable. Please try again later.")
+                return
             await self.update_server_info(interaction)
 
         @self.tree.command(name="info", description="Show available commands")
@@ -79,6 +91,9 @@ class DiscordBot:
 
         @self.tree.command(name="load", description="Use ONCE to load course materials from course website")
         async def load_pdf(interaction: discord.Interaction):
+            if not control_plane.is_command_allowed():
+                await interaction.response.send_message("Bot is currently unavailable. Please try again later.")
+                return
             await interaction.response.send_message("Loading PDFs from the course website...")
             response = await send_to_app("load_course_materials", data={})
             if response.status_code == 200:
@@ -89,11 +104,17 @@ class DiscordBot:
         @self.tree.command(name="resource", description="Query for resources")
         @app_commands.describe(query="The query you want to ask")
         async def resource(interaction: discord.Interaction, query: str):
+            if not control_plane.is_command_allowed():
+                await interaction.response.send_message("Bot is currently unavailable. Please try again later.")
+                return
             await self.handle_query(interaction, 'resource_query', query)
 
         @self.tree.command(name="channel", description="Query for channel information")
         @app_commands.describe(query="The query you want to ask")
         async def channel(interaction: discord.Interaction, query: str):
+            if not control_plane.is_command_allowed():
+                await interaction.response.send_message("Bot is currently unavailable. Please try again later.")
+                return
             await self.handle_query(interaction, 'channel_query', query)
 
 

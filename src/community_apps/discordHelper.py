@@ -7,13 +7,14 @@ from database.modelsChroma import (
 from services.nlpTools import TextProcessor
 from utlis.config import PROFANITY_THRESHOLD
 from backend.modelsPydantic import UpdateChatHistory, Message
+from community_apps.botControlPlane import control_plane
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 nlp_tools = TextProcessor()
 
 async def send_to_app(route, data):
-    async with httpx.AsyncClient(timeout=60.0) as client:
-        response = await client.post(f'http://localhost:8000/{route}', json=data)
+    # helper function to send data to api, replacing previous raw httpx calls for better error handling and automatic rehandshake
+    response = await control_plane.api_call(route, data)
     return response
 
 async def update_message(all_messages, bot_user, chunk_size=25):
