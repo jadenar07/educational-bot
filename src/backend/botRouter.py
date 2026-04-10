@@ -62,7 +62,7 @@ async def heartbeat(request: BotHeartbeatRequest, x_bot_session: str = Header(..
         logger.warning(f"Heartbeat rejected: bot_id mismatch for token_bot={session.bot_id} req_bot={request.bot_id}")
 
         raise HTTPException(status_code=403, detail=BotProtocolErrorResponse(
-            error_code=BotProtocolErrorCode.INVALID_SESSION_TOKEN,
+            error_code=BotProtocolErrorCode.BOT_ID_MISMATCH,
             message="bot_id does not match session",
         ).model_dump())
 
