@@ -15,7 +15,7 @@ class BotSessionMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
         path = request.url.path
 
-        if path.startswith("/bot") and (path != "/bot/handshake") and (path != "/bot/status"):
+        if path.startswith("/bot") and (path != "/bot/handshake"):
             x_bot_session = request.headers.get("x-bot-session")
             
             if not x_bot_session:
@@ -32,7 +32,7 @@ class BotSessionMiddleware(BaseHTTPMiddleware):
                     "error_code": BotProtocolErrorCode.SESSION_REVOKED,
                     "message": "Session has been revoked. Re-handshake required.",
                 })
-            
+                
             if session_status != "valid":
                 logger.warning(f"Invalid/expired session for path={path}")
                 return JSONResponse(status_code=401, content={
