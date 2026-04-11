@@ -164,6 +164,14 @@ jobs:
         with:
           python-version: '3.10.12'
 
+      - name: Debug environment variables
+        run: |
+          echo "DISCORD_TOKEN: ${DISCORD_TOKEN:0:20}..."
+          echo "OPENAI_API_KEY: ${OPENAI_API_KEY:0:20}..."
+          echo "DB_PATH: $DB_PATH"
+          echo "PROFANITY_THRESHOLD: $PROFANITY_THRESHOLD"
+          echo "DISTANCE_THRESHOLD: $DISTANCE_THRESHOLD"
+
       - name: Install dependencies
         run: |
           python3 -m pip install --upgrade pip
