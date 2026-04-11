@@ -46,6 +46,10 @@ asgiref==3.8.1
     #   -r requirements.txt
     #   opentelemetry-instrumentation-asgi
 async-timeout==4.0.3
+    # via
+    #   -r requirements.txt
+    #   aiohttp
+    #   langchain
 attrs==24.2.0
     # via
     #   -r requirements.txt
@@ -57,6 +61,11 @@ aurelio-sdk==0.0.19
     #   -r requirements.txt
     #   semantic-router
 backoff==2.2.1
+    # via
+    #   -r requirements.txt
+    #   posthog
+backports-asyncio-runner==1.2.0
+    # via pytest-asyncio
 bcrypt==4.2.0
     # via
     #   -r requirements.txt
