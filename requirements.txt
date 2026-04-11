@@ -65,7 +65,9 @@ backoff==2.2.1
     #   -r requirements.txt
     #   posthog
 backports-asyncio-runner==1.2.0
-    # via pytest-asyncio
+    # via
+    #   -r requirements.txt
+    #   pytest-asyncio
 bcrypt==4.2.0
     # via
     #   -r requirements.txt
