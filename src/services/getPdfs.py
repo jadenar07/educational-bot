@@ -1,6 +1,6 @@
 import requests, os, asyncio, logging, csv
-from aspose.slides import Presentation
-from aspose.slides.export import SaveFormat
+#from aspose.slides import Presentation
+#from aspose.slides.export import SaveFormat
 from pyppeteer import launch
 from bs4 import BeautifulSoup
 from concurrent.futures import ThreadPoolExecutor, as_completed
