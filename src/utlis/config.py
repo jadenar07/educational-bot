@@ -9,7 +9,7 @@ OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 DB_PATH = os.getenv("DB_PATH", "./local_chromadb")  # Default for CI
 PROFANITY_THRESHOLD = float(os.getenv("PROFANITY_THRESHOLD", 0.7))
 DISTANCE_THRESHOLD = float(os.getenv("DISTANCE_THRESHOLD", 0.25))
-
+os.makedirs(DB_PATH, exist_ok=True)  # Ensure the directory exists
 if not DISCORD_TOKEN:
     raise ValueError("DISCORD_TOKEN is not set in environment variables or .env file")
 

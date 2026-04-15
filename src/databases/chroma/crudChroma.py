@@ -58,7 +58,7 @@ class CRUD():
         # convert ids to str
         ids = [str(id) for id in ids]
         try:
-            collection = self.client.get_collection(collection_name)
+            collection = await asyncio.to_thread(self.client.get_or_create_collection, collection_name)
             results = collection.get(
                 ids=ids,
                 # where={"style": "style1"}
