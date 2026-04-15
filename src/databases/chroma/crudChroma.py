@@ -38,8 +38,8 @@ class CRUD():
             # Generate the embedding for the query
             print(f"Retrieving documents for the collection: {collection_name}")
 
-            # Get the collection
-            collection = self.client.get_collection(collection_name)
+            # Get or create the collection if it doesn't exist
+            collection = await asyncio.to_thread(self.client.get_or_create_collection, collection_name)
             print(f"Collection retrieved: {collection}")
 
             # Query the collection
