@@ -1,14 +1,14 @@
 # Bot Handshake Protocol
 
 ## Overview
-
+The Discord bot and FastAPI backend authenticate via a shared secret handshake at startup. Once connected, the bot sends heartbeats to maintain its session and receive system information. If the backend goes down or revokes the session, the bot automatically degrades and then rehandshakes when the backend recovers.
 
 ## Endpoints
 
 | Method | Path | Auth | Purpose |
 |--------|------|------|---------|
 | POST | `/bot/handshake` | Shared secret in body | Establish session |
-| POST | `/bot/heartbeat` | `x-bot-session` header | Maintain session, receive flags |
+| POST | `/bot/heartbeat` | `x-bot-session` header | Maintain session and receive flags |
 | GET | `/bot/status` | `x-bot-session` header | View active bot sessions |
 
 ## Environment Variables
@@ -32,11 +32,11 @@ Defined in `src/utlis/botProtocolConfig.py`:
 
 The bot operates in one of three states defined in `BotState` enum:
 
-| State | Meaning | Commands Allowed |
-|-------|---------|------------------|
-| `CONNECTED` | Handshake successful, heartbeats flowing | Yes |
-| `DEGRADED` | API responded but maintenance_mode is on, or a heartbeat/API error occurred | No |
-| `OFFLINE` | Handshake failed or session revoked | No |
+| State | Meaning | 
+|-------|---------|
+| `CONNECTED` | Handshake successful, heartbeats are working |
+| `DEGRADED` | API responded but maintenance_mode is on or a heartbeat/API error occurred |
+| `OFFLINE` | Handshake failed or session revoked |
 
 
 ## Failure States & Recovery
@@ -74,11 +74,11 @@ Defined in `BotProtocolErrorCode`:
 
 | File | Purpose |
 |------|---------|
-| `src/backend/botRouter.py` | API endpoints (handshake, heartbeat, status, toggle-flags) |
+| `src/backend/botRouter.py` | API endpoints (handshake, heartbeat, status) |
 | `src/backend/botMiddleware.py` | Session validation middleware |
-| `src/backend/sessionManager.py` | In-memory session store |
+| `src/backend/sessionManager.py` | Session store |
 | `src/backend/modelsPydantic.py` | Request/response models and error codes |
 | `src/utlis/botProtocolConfig.py` | Protocol configuration (TTL, interval, secret, flags) |
-| `src/community_apps/botControlPlane.py` | Bot-side state machine and control plane client |
+| `src/community_apps/botControlPlane.py` | Bot side state machine and control plane client |
 | `src/community_apps/getMessageDiscord.py` | Discord bot commands with control plane integration |
 | `src/community_apps/discordHelper.py` | Discord helper using control plane for API calls |
