@@ -17,7 +17,7 @@ class SessionData:
         self.stats: Dict[str, Any] = {}
         self.revoked: bool = False
 
-
+#TODO: currently everything is store in a dictionary as jaden how to do persistent storage for sessions. audit_logger?
 class SessionManager:
     def __init__(self, session_ttl: timedelta = SESSION_TTL):
         self.sessions: Dict[str, SessionData] = {}
@@ -70,6 +70,8 @@ class SessionManager:
 
         session.last_heartbeat = datetime.now()
         session.last_latency = latency
+        # refresh session expiration on heartbeat to keep active session alive
+        session.expires_at = datetime.now() + self.session_ttl
 
         if stats:
             session.stats.update(stats)
