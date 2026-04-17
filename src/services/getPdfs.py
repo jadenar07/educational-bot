@@ -9,7 +9,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 # Set up logging
 logging.basicConfig(level=logging.INFO, format='%(levelname)s: %(message)s')
 
-PDF_FOLDER = 'pdf_files'
+PDF_FOLDER = os.getenv('PDF_OUTPUT_DIR', 'pdf_files')
 PPTX_FOLDER = 'pptx_files'
 URL_FILENAME = 'hyperlinks.csv'
 CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -148,17 +148,17 @@ def main():
     # convert_all_pptx_in_folder(PPTX_FOLDER, PDF_FOLDER)
 
     # # get the hyperlinks that are pdf and download them
-    # pdf_links = [link for link in hyperlinks if link.endswith('.pdf')]
-    # for link in pdf_links:
-    #     download_file(link, PDF_FOLDER)
+    pdf_links = [link for link in hyperlinks if link.endswith('.pdf')]
+    for link in pdf_links:
+        download_file(link, PDF_FOLDER)
 
     # # get the hyperlinks that are webpages and convert them to pdf
-    # webpage_links = [link for link in hyperlinks if not link.endswith('.pdf') and not link.endswith('.pptx')]
-    # loop = asyncio.get_event_loop()
-    # for link in webpage_links:
-    #     local_filename = link.split('/')[-1] + '.pdf'
-    #     pdf_path = os.path.join(PDF_FOLDER, local_filename)
-    #     loop.run_until_complete(convert_webpage_as_pdf(link, pdf_path))
+    webpage_links = [link for link in hyperlinks if not link.endswith('.pdf') and not link.endswith('.pptx')]
+    loop = asyncio.get_event_loop()
+    for link in webpage_links:
+        local_filename = link.split('/')[-1] + '.pdf'
+        pdf_path = os.path.join(PDF_FOLDER, local_filename)
+        loop.run_until_complete(convert_webpage_as_pdf(link, pdf_path))
 
 if __name__ == "__main__":
     main()

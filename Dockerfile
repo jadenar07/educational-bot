@@ -18,8 +18,9 @@ COPY src/ src/
 
 #Get all relating pdf files and copy them to the app directory
 RUN mkdir -p /app/pdfs \
-    && echo "Created /app/pdfs, running services/get_pdfs.py to populate it..." \
-    && python src/services/get_pdfs.py \
+    && echo "Created /app/pdfs, running services/getPdfs.py to populate it..." \
+    && export PDF_OUTPUT_DIR=/app/pdfs \
+    && python src/services/getPdfs.py \
     && echo "Python script finished. Verifying contents of /app/pdfs:" \
     && ls -l /app/pdfs
 
