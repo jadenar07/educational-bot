@@ -147,7 +147,7 @@ async def update_info(request: Union[UpdateGuildInfo, UpdateChannelInfo, UpdateM
 
 @app.post('/load_course_materials')
 async def load_course_materials():
-    file_path = "./data/pdf_files"
+    file_path = os.getenv('PDF_OUTPUT_DIR', 'pdf_files')
     collection_name = "course_materials"
     try:
         data = await crud.save_pdfs(file_path, collection_name)
