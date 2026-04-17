@@ -79,7 +79,8 @@ class CRUD():
 
         except Exception as e:
             print(f"crudChroma.py: Error with loading PDFs: {e}")
-            return
+            logging.error(f"crudChroma.py: Error with loading PDFs from {file_path}: {e}")
+            return []  # Return empty list instead of None
         
 
         # split the text 

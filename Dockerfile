@@ -2,6 +2,9 @@ FROM python:3.10.13-slim
 
 WORKDIR /app
 
+# Set environment variables for PDF processing
+ENV PDF_OUTPUT_DIR=/app/pdfs
+
 # Install system dependencies for some packages then clean
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
