@@ -16,7 +16,8 @@ if not logger.hasHandlers():
 
 # embedding model options
 async def generate_embedding(text, option = "openai"):
-    logger.info(f"Generating embdeegins for {text}")
+    preview = text[:100]
+    logger.info("Generating embeddings (len=%d, preview=%r)", len(text), preview)
     if option == "openai":
         embedding_model = OpenAIEmbeddings(model="text-embedding-ada-002")
     else:

@@ -1,11 +1,10 @@
+import sys, os, logging, ast
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')))
 
 import asyncio
 from src.router.RouteMap import ThreadSafeMap
 from src.services.queryLangchain import fetchGptResponse
-import sys, os, logging, ast
 import json
-
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')))
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 
@@ -86,7 +85,7 @@ async def create_utterances(query):
         # Persist all utterances to file after update
         try:
             # Gather all utterances in the map
-            all_utterances = dict(UTTERANCES._map)
+            all_utterances = await UTTERANCES.snapshot()
             with open(os.path.join(os.path.dirname(__file__), 'utterances.json'), 'w', encoding='utf-8') as f:
                 json.dump(all_utterances, f, ensure_ascii=False, indent=2)
             logging.info("Persisted utterances to utterances.json")

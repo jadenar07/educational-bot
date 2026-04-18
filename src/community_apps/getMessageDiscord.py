@@ -13,6 +13,40 @@ from backend.modelsPydantic import Message, UpdateChatHistory
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 
+
+async def send_in_chunks(destination, text, chunk_size: int = 1900):
+    """Send `text` to `destination` in multiple messages if it exceeds Discord's limit.
+
+    `destination` must have an async `send` method (ctx, channel, interaction.followup, etc.).
+    """
+    if not isinstance(text, str):
+        text = str(text)
+
+    if len(text) <= chunk_size:
+        await destination.send(text)
+        return
+
+    # Split on newlines when possible for nicer chunks
+    parts = []
+    for line in text.splitlines(keepends=True):
+        if not parts or len(parts[-1]) + len(line) > chunk_size:
+            parts.append(line)
+        else:
+            parts[-1] += line
+
+    # If lines were too long or no newlines, fallback to slicing
+    out = []
+    for p in parts:
+        if len(p) <= chunk_size:
+            out.append(p)
+        else:
+            for i in range(0, len(p), chunk_size):
+                out.append(p[i:i+chunk_size])
+
+    for chunk in out:
+        await destination.send(chunk)
+
+
 class DiscordBot:
     def __init__(self, bot):
         self.bot = bot
@@ -150,7 +184,7 @@ class DiscordBot:
                 return
             
             if response and response.status_code == 200:
-                self.routes.set(collection_name, description)
+                await self.routes.set(collection_name, description)
                 await interaction.followup.send(f"Collection `{collection_name}` created successfully.")
             else:
                 logging.info(response.text)
@@ -230,7 +264,7 @@ class DiscordBot:
 
             if response.status_code == 200:
                 answer = response.json().get("answer", "No answer returned.")
-                await ctx.send(f"Grading completed:\n{answer}")
+                await send_in_chunks(ctx, f"Grading completed:\n{answer}")
             else:
                 await ctx.send(f"Failed to grade submission: {response.text}")
 
@@ -348,7 +382,7 @@ class DiscordBot:
             formatted_sources = '\n'.join([f"{source}" for source in sources])
             combined_result = result + (f"\n\nSources:\n{formatted_sources}" if sources else "")
 
-            await interaction.followup.send(combined_result)
+            await send_in_chunks(interaction.followup, combined_result)
         else:
             await interaction.followup.send("Failed to get response from LLM.")
 

@@ -6,12 +6,15 @@ from router.RouteMap import ThreadSafeMap
 from community_apps.discordHelper import get_from_app
 from utlis.config import DISCORD_TOKEN
 import httpx
+import logging
 from router.utterances import UTTERANCES
 
 # temp
 from databases.chroma.crudChroma import CRUD
 
 sys.path.append(os.path.join(os.path.dirname(__file__), 'src'))
+
+logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 
 # Define bot and command prefix
 '''could use Intents.all() instead of Intents.default()'''
@@ -40,8 +43,8 @@ async def wait_for_backend(timeout=10):
             resp = await get_from_app("health")
             if resp.status_code == 200:
                 return
-        except Exception:
-            pass
+        except Exception as e:
+            logging.error(f'Backend Startup Error: {e}')
 
         if asyncio.get_event_loop().time() - start > timeout:
             raise RuntimeError("Backend never became ready")
@@ -76,7 +79,8 @@ async def main():
 
     # Send the routes map to backend to set up semantic router
     async with httpx.AsyncClient() as client:
-        await client.post("http://localhost:8000/setup_routes", json=routes._map)
+        routes_snapshot = await routes.snapshot()
+        await client.post("http://localhost:8000/setup_routes", json=routes_snapshot)
 
     discord_bot.set_routes(routes)
 

@@ -4,7 +4,6 @@ Test script for Collection Management API
 """
 import asyncio
 import httpx
-import json
 
 BASE_URL = "http://localhost:8000"
 
@@ -15,7 +14,7 @@ async def test_collection_api():
         
 
 
-        print("Test colllection management endpoints")
+        print("Test collection management endpoints")
         
         # Test 1: Create a new collection
         print("\n1. Creating a new collection...")

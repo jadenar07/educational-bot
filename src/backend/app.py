@@ -35,6 +35,28 @@ crud = CRUD()
 postgres_crud = PostgresCRUD()
 semantic_router = create_router(crud)
 
+
+@app.on_event("startup")
+async def startup_event():
+    try:
+        # Try to pre-load persisted utterances into the router at startup
+        # UTTERANCES stores a dict in _map; copy it to a plain dict for _setup_routes
+        from router.utterances import UTTERANCES
+        routes = dict(getattr(UTTERANCES, '_map', {}))
+        if routes:
+            logging.info("Scheduling background preload of routes from UTTERANCES on startup")
+            # Run heavy init in a background thread so startup doesn't block
+            import asyncio
+            def _bg_setup():
+                try:
+                    semantic_router._setup_routes(routes)
+                except Exception as e:
+                    logging.error(f"Background route setup failed: {e}")
+
+            asyncio.get_event_loop().create_task(asyncio.to_thread(_bg_setup))
+    except Exception as e:
+        logging.error(f"Failed to preload routes at startup: {e}")
+
 @app.get("/health")
 async def health():
     return {"status": "ok"}
@@ -47,8 +69,13 @@ async def channel_query(request: QueryRequest):
         relevant_docs = await crud.get_data_by_similarity(collection_name, query_embedding, top_k=5)
         channel_info = await crud.get_data_by_id(f"channel_info_{request.guild_id}", [request.channel_id])
 
-        content = relevant_docs.get('documents')[0]
-        data = channel_info.get('metadatas')[0]
+        docs = relevant_docs.get('documents', [])
+        content = docs[0] if isinstance(docs, list) and len(docs) > 0 else []
+        if isinstance(content, list):
+            content = content[:3]
+
+        metadata_entries = channel_info.get('metadatas', []) if isinstance(channel_info, dict) else []
+        data = metadata_entries[0] if metadata_entries else {}
 
         logging.info(f"Relevant messages: {content}")
         logging.info(f"Channel info: {data}")
@@ -56,7 +83,7 @@ async def channel_query(request: QueryRequest):
         # combine the relevant messages and channel info
         combined_data = {
             'relevant_messages': content,
-            'channel_info': channel_info
+            'channel_info': data
         }
 
         answer = await fetchGptResponse(request.query, PROMPTS['channel_summarizer'], combined_data)
@@ -86,24 +113,41 @@ async def resource_query(request: QueryRequest):
         # response = await process_query(crud, request)
         logging.info("Attempting to do resource query")
         response = await semantic_router.process_query(request)
-        
+        # handle router errors returned as dicts
+        if isinstance(response, dict) and response.get('error'):
+            logging.error(f"Router error: {response.get('error')}")
+            # If the index isn't ready, return 503 to indicate temporary unavailability
+            if 'Index is not ready' in str(response.get('error')):
+                raise HTTPException(status_code=503, detail=response.get('error'))
+            raise HTTPException(status_code=500, detail=response.get('error'))
+
         # should generate a response based on this
 
         if response is None:
             raise ValueError("Process_query returned none")
     
-        documents = await crud.get_all_documents(response.name)
-
-        relevant_documents = documents.get('documents', [])
-
-        logging.info(f"Relevant documents: {relevant_documents}")
-
+        # Limit the documents sent to the LLM by doing a similarity search
         query = request.query
+        query_embedding = await generate_embedding(query)
+        similar = await crud.get_data_by_similarity(response.name, query_embedding, top_k=3)
+
+        # Chroma returns documents as a list-of-lists for batched queries; extract the first list
+        relevant_documents = []
+        try:
+            docs = similar.get('documents', [])
+            if isinstance(docs, list) and len(docs) > 0:
+                relevant_documents = docs[0]
+        except Exception as e:
+            relevant_documents = []
+            logging.info(f'Unable to pull relevant documents: {e}')
+
+        logging.info(f"Relevant documents (top_k=3): {relevant_documents}")
+
         # combine the relevant messages and channel info
         combined_data = {
-            "relevant_docuements": relevant_documents,
+            "relevant_documents": relevant_documents,
             "query": query,
-            "question_type": response 
+            "question_type": getattr(response, 'name', str(response))
         }
 
         answer = await fetchGptResponse(
@@ -201,11 +245,22 @@ async def create_collection(payload: CollectionCreate):
         )
     description = payload.description if payload.description is not None else ""
     metadata = payload.metadata if payload.metadata is not None else {}
-    result = await crud.create_collection(
-        name=name,
-        description=description,
-        metadata=metadata,
-    )
+    
+    try:
+        result = await crud.create_collection(
+            name=name,
+            description=description,
+            metadata=metadata,
+        )
+        # Check for error dict immediately before proceeding
+        if isinstance(result, dict) and result.get("error"):
+            logging.error(f"Failed to create collection '{name}': {result.get('error')}")
+            raise HTTPException(status_code=400, detail=result["error"])
+    except HTTPException:
+        raise
+    except Exception as e:
+        logging.error(f"Failed to create collection '{name}': {e}")
+        raise HTTPException(status_code=400, detail=f"Failed to create collection: {e}")
 
     # generate utterances based on the description
     query = f"name: {name}, description: {description}"
@@ -222,11 +277,6 @@ async def create_collection(payload: CollectionCreate):
     else:
         logging.warning(f"No utterances found for collection '{name}', route not added.")
 
-    semantic_router.add_route(name=name, utterances=new_utterances)
-    
-    if isinstance(result, dict) and result.get("error"):
-        logging.error(result.get("error"))
-        raise HTTPException(status_code=400, detail=result["error"])
     info = await crud.get_collection_info(name)
     if isinstance(info, dict) and info.get("error"):
         raise HTTPException(status_code=404, detail=info["error"])
@@ -312,7 +362,7 @@ async def upload_multiple_pdfs(files: List[UploadFile] = File(...), collection_n
             for i in range(0, len(data), chunk_size):
                 await crud.save_to_db(data[i:i+chunk_size])
 
-            return {"message": "PDFs saved successfully."}
+            logging.info("PDFs saved successfully.")
         except Exception as e:
             logging.error(f"app.py: Error with uploading PDFs: {e}")
             return {"message": "Failed to save PDFs."}
@@ -333,11 +383,18 @@ async def grading_expert(file: UploadFile = File(...)):
             return
         
         
-        rubric_docs = await crud.get_all_documents("grading_expert")
+        # Use similarity search to pick the most relevant rubric items (prevents sending everything)
+        similar = await crud.get_data_by_similarity("grading_expert", file_embeddings, top_k=5)
+        rubric_texts = []
+        try:
+            docs = similar.get('documents', [])
+            if isinstance(docs, list) and len(docs) > 0:
+                rubric_texts = docs[0]
+        except Exception as e:
+            logging.info(f'Grading expert error: {e}')
+            rubric_texts = []
 
-        rubric_texts = rubric_docs.get('documents', [])
-
-        logging.info(f"Relevant documents: {rubric_texts}")
+        logging.info(f"Relevant rubric documents (top_k=5): {rubric_texts}")
 
         # combine the relevant messages and channel info
         combined_data = {

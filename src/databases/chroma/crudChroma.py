@@ -226,13 +226,13 @@ class CRUD():
                 if existing_collection:
                     return {"error": f"Collection '{name}' already exists"}
             except:
-                # Collection doesn't exist, which is what we want
+                # Collection doesn't exist yet, that's expected - proceed to create
                 pass
-            
+
             # Create the collection
             collection = self.client.create_collection(
                 name=name,
-                metadata={"description": description, **(metadata)}
+                metadata={"description": description, **(metadata or {})}
             )
             
             print(f"Collection '{name}' created successfully")

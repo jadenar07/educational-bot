@@ -1,5 +1,5 @@
 # modelsPydantic.py
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing import List, Dict, Optional, Any
 
 class QueryRequest(BaseModel):
@@ -60,5 +60,5 @@ class UpdateChannelList(BaseModel):
 class CollectionCreate(BaseModel):
     name: str
     description: Optional[str] = None
-    metadata: Optional[Dict[str, Any]] = {}
+    metadata: Optional[Dict[str, Any]] = Field(default_factory=dict)
     

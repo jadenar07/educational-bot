@@ -18,6 +18,11 @@ class ThreadSafeMap:
         async with self._lock:
             del self._map[key]
     
+    async def snapshot(self):
+        """Returns a thread-safe copy of the map by acquiring the lock."""
+        async with self._lock:
+            return dict(self._map)
+    
     def __str__(self):
         return f"{self._map}"
 

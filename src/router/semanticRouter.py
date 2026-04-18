@@ -22,9 +22,24 @@ class SemanticRouter:
         
         # Set up variables
         self.crud = crud
-        self.encoder = LocalEncoder()
+        # Delay heavy initialization (models, encoders, index) until first use
+        self.encoder = None
         self.routes = []
-        self.route_layer = AurelioSemanticRouter(encoder=self.encoder, routes=[], auto_sync="local")
+        self.route_layer = None
+
+    def _init_route_layer(self):
+        """Lazily initialize the underlying AurelioSemanticRouter to avoid heavy work at import/construct time."""
+        if self.route_layer is None:
+            # create encoder only when needed
+            if self.encoder is None:
+                self.encoder = LocalEncoder()
+            self.route_layer = AurelioSemanticRouter(encoder=self.encoder, routes=list(self.routes), auto_sync="local")
+            # ensure index is synced after creation
+            if hasattr(self.route_layer, "sync"):
+                try:
+                    self.route_layer.sync("local")
+                except Exception as e:
+                    logging.error(f'Semantic Router Layer Startup Error: {e}')
     
     #create collections endpoint is going to need to make a call to chatgpt when
     # given a description and create utterances based on it
@@ -36,22 +51,30 @@ class SemanticRouter:
         for route, utterances in routes.items():
             route_obj = Route(name=route, utterances=utterances)
             router_routes.append(route_obj)
-        self.route_layer.routes = router_routes
-        # Ensure the index is built/synced after setting routes
-        if hasattr(self.route_layer, "sync"):
-            self.route_layer.sync("local")
+        # keep internal `self.routes` in sync with the route layer so
+        # later calls to `add_route` append rather than overwrite.
+        self.routes = router_routes
+        # ensure the route layer exists before updating
+        self._init_route_layer()
+        self.route_layer.routes = list(self.routes)
         logging.info(f"Successfully setup routes: {self.route_layer.routes}")
         return {"status": "routes setup", "routes": [r.name for r in router_routes]}
     
     def add_route(self, name, utterances):
-        logging.info(f"Before adding routes: {self.route_layer.routes}\n")
+        # route_layer may be None; log current known route names
+        current_routes = getattr(self.route_layer, 'routes', self.routes)
+        logging.info(f"Before adding routes: {current_routes}\n")
         logging.info(f"name: {name}, utterances: {utterances}")
         route_obj = Route(name=name, utterances=utterances)
         self.routes.append(route_obj)
+        # ensure router is initialized then update
+        self._init_route_layer()
         self.route_layer.routes = self.routes
-        # Ensure the index is built/synced after adding a route
         if hasattr(self.route_layer, "sync"):
-            self.route_layer.sync("local")
+            try:
+                self.route_layer.sync("local")
+            except Exception as e:
+                logging.error(f'Add Route Error: {e}')
         logging.info(f"Successfully added routes: {self.route_layer.routes}")
 
 
@@ -63,11 +86,14 @@ class SemanticRouter:
         query_embedding = await generate_embedding(request.query)
         collection_name = collection_name
         relevant_docs = await self.crud.get_data_by_similarity(collection_name, query_embedding, top_k=5)
-        
-        content = relevant_docs.get('documents')[0]
+
+        # Extract the list of documents (Chroma returns list-of-lists)
+        docs = relevant_docs.get('documents', [])
+        content = docs[0] if isinstance(docs, list) and len(docs) > 0 else []
         logging.info(f"Relevant messages: {content}")
 
-        answer = await fetchGptResponse(request.query, PROMPTS[prompt_name], relevant_docs)
+        # Pass only a compact dict to the LLM to avoid sending excessive data
+        answer = await fetchGptResponse(request.query, PROMPTS[prompt_name], {"relevant_documents": content})
 
         logging.info(f"Answer: {answer}")
         return {'answer': answer}
@@ -76,13 +102,36 @@ class SemanticRouter:
         """Main entry point to process a query through the semantic router"""
         try:
             logging.info("Attempting to use route layer")
+            # ensure route layer is ready (lazy init)
+            self._init_route_layer()
             route = self.route_layer(request.query)
+            logging.info(f"Raw route result type: {type(route)}; repr: {repr(route)}")
+
+            # Normalize route to an object with a `name` attribute expected by the caller
+            if hasattr(route, "name"):
+                normalized = route
+            elif isinstance(route, str):
+                # router returned the matched route name as a string
+                class _R: pass
+                r = _R()
+                r.name = route
+                normalized = r
+            elif isinstance(route, dict) and "name" in route:
+                class _R: pass
+                r = _R()
+                r.name = route.get("name")
+                normalized = r
+            else:
+                # fallback: coerce to string as the route name
+                class _R: pass
+                r = _R()
+                r.name = str(route)
+                normalized = r
             logging.info(f"Response from the route layer: {route}, original query: {request.query}")
 
-            # Log the processed route details
-            logging.info(f"Processed route: {route}")
+            logging.info(f"Processed route: {normalized}")
 
-            return route 
+            return normalized
 
         except Exception as e:
             logging.error(f"Error processing query: {request.query} | Error: {e}")
