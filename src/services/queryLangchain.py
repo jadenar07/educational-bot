@@ -52,9 +52,12 @@ fetchGptResponse: 3.762374473
 '''
 
 
-async def fetchGptResponse(query, role, data=[]):
+async def fetchGptResponse(query, role, data=None):
     # Build a context for rendering templates
     context = {}
+    if data is None:
+        data = []
+        
     if isinstance(data, dict):
         context.update(data)
 

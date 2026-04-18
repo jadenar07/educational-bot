@@ -1,10 +1,12 @@
 # app.py
 
-import httpx, uvicorn, chromadb, time
+import httpx, uvicorn, chromadb, time, asyncio
 from fastapi import FastAPI, HTTPException, UploadFile, File, Form, Body
 from typing import Union, List
-from utlis.pdf_helpers import read_text_file
+from utlis.pdf_helpers import read_pdf_text
 from databases.chroma.modelsChroma import generate_embedding
+from router.utterances import UTTERANCES, load_persisted_utterances
+
 import sys
 import os
 import logging
@@ -39,14 +41,14 @@ semantic_router = create_router(crud)
 @app.on_event("startup")
 async def startup_event():
     try:
-        # Try to pre-load persisted utterances into the router at startup
-        # UTTERANCES stores a dict in _map; copy it to a plain dict for _setup_routes
-        from router.utterances import UTTERANCES
-        routes = dict(getattr(UTTERANCES, '_map', {}))
+        # Load persisted utterances from file into the UTTERANCES map
+        await load_persisted_utterances()
+        
+        # Pre-load persisted utterances into the router at startup
+        routes = await UTTERANCES.snapshot()
         if routes:
             logging.info("Scheduling background preload of routes from UTTERANCES on startup")
             # Run heavy init in a background thread so startup doesn't block
-            import asyncio
             def _bg_setup():
                 try:
                     semantic_router._setup_routes(routes)
@@ -263,7 +265,7 @@ async def create_collection(payload: CollectionCreate):
         raise HTTPException(status_code=400, detail=f"Failed to create collection: {e}")
 
     # generate utterances based on the description
-    query = f"name: {name}, description: {description}"
+    query = f"Collection name: {name}\nCategory description: {description}"
     try:
         logging.info("attempting to create utterances")
         await create_utterances(query)
@@ -345,27 +347,42 @@ async def upload_multiple_pdfs(files: List[UploadFile] = File(...), collection_n
     """
     Handles the upload of multiple PDF files.
     """
+    processed_files = []
+    failed_files = []
 
     for file in files:
         if file.content_type != "application/pdf":
-            # Optional: Add content type validation
             raise HTTPException(status_code=400, detail=f"Invalid file type for {file.filename}. Only PDFs are allowed.")
         try:
-            text = await read_text_file(file)
+            text = await read_pdf_text(file)
             file_embeddings = await generate_embedding(text)
 
-            # lets make it so they have to enter the collection name to upload a pdf
             pdf = (text, file_embeddings)
-            data = await crud.save_pdfs_from_discord(user,collection_name, pdf)
+            data = await crud.save_pdfs_from_discord(user, collection_name, pdf)
 
             chunk_size = 10
             for i in range(0, len(data), chunk_size):
                 await crud.save_to_db(data[i:i+chunk_size])
 
-            logging.info("PDFs saved successfully.")
+            logging.info(f"PDFs saved successfully for user {user} to collection {collection_name}.")
+            processed_files.append(file.filename)
         except Exception as e:
             logging.error(f"app.py: Error with uploading PDFs: {e}")
-            return {"message": "Failed to save PDFs."}
+            failed_files.append({"filename": file.filename, "error": str(e)})
+    
+    if failed_files:
+        raise HTTPException(
+            status_code=500, 
+            detail=f"Failed to process {len(failed_files)} file(s): {failed_files}"
+        )
+    
+    return {
+        "message": "PDFs uploaded and saved successfully.",
+        "collection": collection_name,
+        "processed_count": len(processed_files),
+        "processed_files": processed_files,
+        "user": user
+    }
 
 @app.post('/grading_expert') #, response_model=QueryResponse
 async def grading_expert(file: UploadFile = File(...)):
@@ -376,11 +393,11 @@ async def grading_expert(file: UploadFile = File(...)):
         if file.content_type != "application/pdf":
             raise HTTPException(status_code=400, detail=f"Invalid file type for {file.filename}. Only PDFs are allowed.")
 
-        text = await read_text_file(file)
+        text = await read_pdf_text(file)
         file_embeddings = await generate_embedding(text)
     
         if not file_embeddings:
-            return
+            raise HTTPException(status_code=500, detail="Failed to generate file embeddings.")
         
         
         # Use similarity search to pick the most relevant rubric items (prevents sending everything)
@@ -396,15 +413,19 @@ async def grading_expert(file: UploadFile = File(...)):
 
         logging.info(f"Relevant rubric documents (top_k=5): {rubric_texts}")
 
-        # combine the relevant messages and channel info
+        # Truncate submission if too long to avoid excessive token usage
+        max_submission_length = 5000
+        submission_text = text[:max_submission_length] + ("..." if len(text) > max_submission_length else "")
+
+        # Keep submission in data dict for template rendering, not as the query
         combined_data = {
-            "rubric": rubric_texts,
-            "submission": text
+            "retrieved_context": rubric_texts,
+            "student_submission": text
         }
 
-        answer = await fetchGptResponse(
-                    text, PROMPTS['grading_expert'], combined_data
-                )        
+        # Use a short query instead of the entire PDF text
+        query = "Grade this student submission according to the rubric."
+        answer = await fetchGptResponse(query, PROMPTS['grading_expert'], combined_data)        
         logging.info(f"Answer: {answer}")
         return {'answer': answer}
 

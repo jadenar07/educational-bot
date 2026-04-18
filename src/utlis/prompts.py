@@ -25,8 +25,8 @@ Your task is to evaluate the student's submission according to the official grad
    - Suggestions for improvement (if applicable)
 
 ## INPUTS:
-- [Retrieved Rubric]: {{retrieved_context}}
-- [Student Submission]: {{student_submission}}
+- [Retrieved Rubric]: {{rubric}}
+- [Student Submission]: {{submission}}
 
 ## OUTPUT FORMAT (EXAMPLE):
 

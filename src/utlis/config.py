@@ -9,6 +9,19 @@ DB_PATH = os.getenv("DB_PATH")
 PROFANITY_THRESHOLD = float(os.getenv("PROFANITY_THRESHOLD"))
 DISTANCE_THRESHOLD = float(os.getenv("DISTANCE_THRESHOLD"))
 
+# Data directory for persisting utterances and other runtime data
+# Defaults to XDG_DATA_HOME, then user's home/.local/share/educational-bot, then ./data
+DATA_DIR = os.getenv(
+    "DATA_DIR",
+    os.getenv(
+        "XDG_DATA_HOME",
+        os.path.join(os.path.expanduser("~"), ".local", "share", "educational-bot")
+    )
+)
+
+# Ensure data directory exists
+os.makedirs(DATA_DIR, exist_ok=True)
+
 if not DISCORD_TOKEN:
     raise ValueError("DISCORD_TOKEN is not set in .env file")
 

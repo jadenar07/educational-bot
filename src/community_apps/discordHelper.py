@@ -134,15 +134,16 @@ async def message_filter(message, bot_user):
 async def available_commands():
     commands = (
         "Use / to view commands and interact with the Course Assistant:\n"
-        "1. /info - List available commands"
+        "1. /info - List available commands\n"
         "2. /channel - Queries related to channel\n"
         "3. /resource - Queries related to the course\n"
-        "4. /setup - Use ONLY ONE time to setup chat history and server information. \n"
-        "5. /load_course_materials - use ONLY ONE time to load course materials from course website\n"
+        "4. /setup - Use ONLY ONE time to setup chat history and server information.\n"
+        "5. /load_course_materials - Use ONLY ONE time to load course materials from course website\n"
         "6. /remove - Remove bot from channel\n"
-        "7. /upload_pdf - upload the pdfs of your choice AFTER creating a collection"
-        "8. /create - create a collection"
-        "9. /get_collections - get a list of all the collections"
+        "7. /create_collection - Create a collection\n"
+        "8. !upload - Upload the PDFs of your choice after creating a collection\n"
+        "9. !grade - Grade using the uploaded course materials\n"
+        "10. /get_collections - Get a list of all the collections\n"
     )
     return commands
 

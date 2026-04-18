@@ -8,6 +8,12 @@ import json
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 
+# Import DATA_DIR lazily to avoid circular import issues
+def _get_utterances_path():
+    """Get the path to utterances.json in the data directory."""
+    from src.utlis.config import DATA_DIR
+    return os.path.join(DATA_DIR, 'utterances.json')
+
 LLM_ROLE = """
 You are an expert utterance generator for an academic support system. Your job is to create realistic student user utterances that belong to a specific intent category so they can be used for semantic routing.
 
@@ -51,23 +57,39 @@ Your output must look exactly like this format:
 
 UTTERANCES = ThreadSafeMap()
 
-# Load persisted utterances from file on startup
-_utterances_path = os.path.join(os.path.dirname(__file__), 'utterances.json')
-if os.path.exists(_utterances_path):
+async def load_persisted_utterances():
+    """Load persisted utterances from file into UTTERANCES map. Call from async startup hook."""
+    utterances_path = _get_utterances_path()
+    
+    # Fallback to old location if file doesn't exist in new location
+    old_utterances_path = os.path.join(os.path.dirname(__file__), 'utterances.json')
+    
+    path_to_load = utterances_path if os.path.exists(utterances_path) else old_utterances_path
+    
+    if not os.path.exists(path_to_load):
+        logging.info(f"No persisted utterances file found at {path_to_load}.")
+        return
+    
     try:
-        with open(_utterances_path, 'r', encoding='utf-8') as f:
+        with open(path_to_load, 'r', encoding='utf-8') as f:
             persisted = json.load(f)
 
         # Populate the ThreadSafeMap
         for name, utterances in persisted.items():
-            loop = asyncio.get_event_loop()
-            if loop.is_running():
-                asyncio.create_task(UTTERANCES.set(name, utterances))
-            else:
-                loop.run_until_complete(UTTERANCES.set(name, utterances))
-        logging.info("Loaded persisted utterances from utterances.json")
+            await UTTERANCES.set(name, utterances)
+        logging.info(f"Loaded {len(persisted)} persisted utterances from {path_to_load}")
+        
+        # If we loaded from old location, copy to new location for next time
+        if path_to_load == old_utterances_path and path_to_load != utterances_path:
+            try:
+                os.makedirs(os.path.dirname(utterances_path), exist_ok=True)
+                with open(utterances_path, 'w', encoding='utf-8') as f:
+                    json.dump(persisted, f, ensure_ascii=False, indent=2)
+                logging.info(f"Copied utterances to new location: {utterances_path}")
+            except Exception as copy_err:
+                logging.warning(f"Could not copy utterances to new location: {copy_err}")
     except Exception as e:
-        logging.error(f"Failed to load persisted utterances: {e}")
+        logging.error(f"Failed to load persisted utterances: {e}", exc_info=True)
 
 async def create_utterances(query):
     try:
@@ -80,15 +102,16 @@ async def create_utterances(query):
         if not isinstance(utterances, list):
             raise ValueError("Utterances is not a list after parsing.")
 
-        logging.info(f"Succesfuly generated utterances for {name}: {utterances}")
+        logging.info(f"Successfully generated utterances for {name}: {utterances}")
         await UTTERANCES.set(name, utterances)
         # Persist all utterances to file after update
         try:
+            utterances_path = _get_utterances_path()
             # Gather all utterances in the map
             all_utterances = await UTTERANCES.snapshot()
-            with open(os.path.join(os.path.dirname(__file__), 'utterances.json'), 'w', encoding='utf-8') as f:
+            with open(utterances_path, 'w', encoding='utf-8') as f:
                 json.dump(all_utterances, f, ensure_ascii=False, indent=2)
-            logging.info("Persisted utterances to utterances.json")
+            logging.info(f"Persisted utterances to {utterances_path}")
         except Exception as file_err:
             logging.error(f"Failed to persist utterances: {file_err}")
         logging.info(f"Updated utterances: {UTTERANCES}")
