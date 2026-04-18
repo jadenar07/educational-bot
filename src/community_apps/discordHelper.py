@@ -1,9 +1,7 @@
-import os, json, httpx, discord, logging
+import sys, os, httpx, discord, logging
+sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 import numpy as np 
 from profanity_check import predict_prob
-from database.modelsChroma import (
-    GuildInfo, ChannelInfo, MemberInfoChannel
-)
 from services.nlpTools import TextProcessor
 from utlis.config import PROFANITY_THRESHOLD
 from backend.modelsPydantic import UpdateChatHistory, Message
@@ -11,10 +9,28 @@ from backend.modelsPydantic import UpdateChatHistory, Message
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 nlp_tools = TextProcessor()
 
+# todo: move these later
 async def send_to_app(route, data):
     async with httpx.AsyncClient(timeout=60.0) as client:
-        response = await client.post(f'http://localhost:8000/{route}', json=data)
+        logging.info(f'route: {route}')
+        if route == "upload_pdfs":
+            # For file uploads, data is a dict with files and form fields
+            response = await client.post(f'http://localhost:8000/{route}', **data)
+        elif route == "collections":
+            # For collections, send JSON body
+            response = await client.post(f'http://localhost:8000/{route}', json=data)
+        else:
+            logging.info(f"route: {route}, data: {data}")
+            response = await client.post(f'http://localhost:8000/{route}', json=data)
+            logging.info(f'response code at send app level: {response.status_code}')
     return response
+
+async def get_from_app(route, params=None):
+    async with httpx.AsyncClient(timeout=60.0) as client:
+        return await client.get(
+            f"http://localhost:8000/{route}",
+            params=params
+        )
 
 async def update_message(all_messages, bot_user, chunk_size=25):
     for channel_id, messages in all_messages.items():
@@ -118,12 +134,16 @@ async def message_filter(message, bot_user):
 async def available_commands():
     commands = (
         "Use / to view commands and interact with the Course Assistant:\n"
-        "   1. /info - List available commands"
+        "1. /info - List available commands\n"
         "2. /channel - Queries related to channel\n"
         "3. /resource - Queries related to the course\n"
-        "4. /setup - Use ONLY ONE time to setup chat history and server information. \n"
-        "5. /load_course_materials - use ONLY ONE time to load course materials from course website\n"
+        "4. /setup - Use ONLY ONE time to setup chat history and server information.\n"
+        "5. /load_course_materials - Use ONLY ONE time to load course materials from course website\n"
         "6. /remove - Remove bot from channel\n"
+        "7. /create_collection - Create a collection\n"
+        "8. !upload - Upload the PDFs of your choice after creating a collection\n"
+        "9. !grade - Grade using the uploaded course materials\n"
+        "10. /get_collections - Get a list of all the collections\n"
     )
     return commands
 

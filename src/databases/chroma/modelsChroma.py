@@ -3,9 +3,21 @@ import asyncio
 from langchain.schema import Document
 from langchain_openai import OpenAIEmbeddings
 from langchain_community.embeddings.sentence_transformer import SentenceTransformerEmbeddings
+# Add this at the top of your file (after imports)
+import logging
+
+logger = logging.getLogger("crudChroma")
+logger.setLevel(logging.INFO)
+handler = logging.StreamHandler()
+formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
+handler.setFormatter(formatter)
+if not logger.hasHandlers():
+    logger.addHandler(handler)
 
 # embedding model options
 async def generate_embedding(text, option = "openai"):
+    preview = text[:100]
+    logger.info("Generating embeddings (len=%d, preview=%r)", len(text), preview)
     if option == "openai":
         embedding_model = OpenAIEmbeddings(model="text-embedding-ada-002")
     else:

@@ -7,14 +7,26 @@ from databases.chroma.modelsChroma import generate_embedding
 from services.getPdfs import read_hyperlinks, match_filenames_to_urls
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain_community.document_loaders import DirectoryLoader
+import logging
+
+logger = logging.getLogger("crudChroma")
+logger.setLevel(logging.INFO)
+handler = logging.StreamHandler()
+formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
+handler.setFormatter(formatter)
+if not logger.hasHandlers():
+    logger.addHandler(handler)
 
 class CRUD():
     def __init__(self):
         self.client = chromadb.PersistentClient(path = DB_PATH)
         
     async def save_to_db(self, data):
+        # logger.info(f"Saving {data} to db")
         for item in data:
-            collection_name, document, embedding = item['collection_name'], item['document'], item['embedding']
+            collection_name, document, embedding, metadata = (
+                item['collection_name'], item['document'], item['embedding'], item.get('metadata', {})
+            )
 
             # Change collection_name to type str since it was an int, but has to
             # be a str in order to be used as a collection name
@@ -23,15 +35,27 @@ class CRUD():
             # Note that collection_name is equivalent to channel_id
             collection = await asyncio.to_thread(self.client.get_or_create_collection, collection_name)
 
-            await asyncio.to_thread(collection.upsert,
-                # Same for id, has to be a str
-                ids=[str(document.metadata['id'])],
-                documents=[document.page_content],
+            # Handle both document types: (1) LangChain Document object, (2) plain string
+            if hasattr(document, 'metadata') and hasattr(document, 'page_content'):
+                # LangChain Document
+                doc_id = str(document.metadata.get('id', 'unknown'))
+                doc_content = document.page_content
+                doc_metadata = document.metadata
+            else:
+                # Plain string (from Discord upload)
+                doc_id = str(metadata.get('id', str(uuid.uuid4())))
+                doc_content = document
+                doc_metadata = metadata
+
+            await asyncio.to_thread(
+                collection.upsert,
+                ids=[doc_id],
+                documents=[doc_content],
                 embeddings=[embedding],
-                metadatas=[document.metadata]
+                metadatas=[doc_metadata]
             )
 
-            print(f"'{document.page_content}' is added to the collection {collection_name}")
+            print(f"'{doc_content[:50]}' is added to the collection {collection_name}")
 
     async def get_data_by_similarity(self, collection_name, query_embedding, top_k=10):
         try:
@@ -52,6 +76,15 @@ class CRUD():
 
         except Exception as e:
             print(f"Error with retrieving relevant history: {e}")
+            return []
+    
+    async def get_all_documents(self, collection_name):
+        try:
+            collection = self.client.get_collection(collection_name)
+            results = collection.get()  # No filters, gets all documents
+            return results
+        except Exception as e:
+            print(f"Error retrieving all documents: {e}")
             return []
     
     async def get_data_by_id(self, collection_name, ids):
@@ -137,5 +170,131 @@ class CRUD():
             })
 
         return data_to_save
+    
+    async def save_pdfs_from_discord(self, user, collection_name, pdf):
+        print(f"Saving PDFs from {user} to collection {collection_name}")
 
+        doc, embedding = pdf
+        
+        data_to_save = []
+        # Prepare the metadata for saving
+        metadata = {
+            "source": user
+        }
 
+        # Add to data to be saved
+        data_to_save.append({
+            "collection_name": collection_name,
+            "document": doc,
+            "embedding": embedding,
+            "metadata": metadata
+        })
+
+        return data_to_save
+
+    async def get_collection_info(self, name: str):
+        # Get information aboput a part icualr collection 
+        try:
+            collection = self.client.get_collection(name)
+            count = collection.count()
+            metadata = collection.metadata or {}
+
+            # Get a sample of document IDs (or other identifying info)
+            docs = collection.get(limit=3)  # Adjust as needed; may need to use your DB's API
+            sample_docs = docs.get("ids", []) if docs else []
+
+            return {
+                "name": collection.name,
+                "description": metadata.get("description"),
+                "metadata": metadata,
+                "document_count": count,
+                "created_at": metadata.get("created_at"),
+                "sample_documents": sample_docs  # Add this line
+            }
+            
+        except Exception as e:
+            print(f"Error getting collection info for '{name}': {e}")
+            return {"error": f"Collection '{name}' not found"}
+
+    # Collection Management Methods
+    async def create_collection(self, name: str, description: str = None, metadata = None):
+        """Create a new collection explicitly"""
+        try:
+            # Check if collection already exists
+            try:
+                existing_collection = self.client.get_collection(name)
+                if existing_collection:
+                    return {"error": f"Collection '{name}' already exists"}
+            except:
+                # Collection doesn't exist yet, that's expected - proceed to create
+                pass
+
+            # Create the collection
+            collection = self.client.create_collection(
+                name=name,
+                metadata={"description": description, **(metadata or {})}
+            )
+            
+            print(f"Collection '{name}' created successfully")
+            return {"message": f"Collection '{name}' created successfully", "collection": collection}
+            
+        except Exception as e:
+            print(f"Error creating collection '{name}': {e}")
+            return {"error": str(e)}
+    
+    async def delete_collection(self, name: str):
+        """Deletes a collection"""
+        try:
+            try:
+                collection = self.client.get_collection(name)
+                if collection:
+                    self.client.delete_collection(name)
+                    print(f"Collection '{name}' deleted successfully")
+                    return {"message": f"Collection '{name}' deleted successfully"}
+            except Exception as e:
+                return {"error": f"Collection '{name}' not found"}
+                
+        except Exception as e:
+            print(f"Error deleting collection '{name}': {e}")
+            return {"error": str(e)}
+    
+    async def list_collections(self):
+        """List all collections with metadata"""
+        try:
+            collections = self.client.list_collections()
+            collection_list = []
+            
+            for collection in collections:
+                try:
+                    # Get collection metadata and count
+                    count = collection.count()
+                    metadata = collection.metadata or {}
+                    
+                    collection_info = {
+                        "name": collection.name,
+                        "description": metadata.get("description"),
+                        "metadata": metadata,
+                        "document_count": count,
+                        "created_at": metadata.get("created_at")
+                    }
+                    collection_list.append(collection_info)
+                    
+                except Exception as e:
+                    collection_info = {
+                        "name": collection.name,
+                        "description": None,
+                        "metadata": {},
+                        "document_count": 0,
+                        "created_at": None
+                    }
+                    collection_list.append(collection_info)
+            
+            return {
+                "collections": collection_list,
+                "total_count": len(collection_list)
+            }
+            
+        except Exception as e:
+            print(f"Error listing collections: {e}")
+            return {"error": str(e)}
+    

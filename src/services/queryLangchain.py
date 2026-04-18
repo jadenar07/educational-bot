@@ -6,7 +6,14 @@ from langchain.chains import RetrievalQA
 from langchain_community.vectorstores import Chroma
 from langchain_community.embeddings.sentence_transformer import SentenceTransformerEmbeddings
 from langchain_core.caches import BaseCache
-from utlis.config import OPENAI_API_KEY, DB_PATH, DISTANCE_THRESHOLD
+from src.utlis.config import OPENAI_API_KEY, DB_PATH, DISTANCE_THRESHOLD
+from jinja2 import Template
+import logging
+
+import sys
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')))
+logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
+
 
 llm = ChatOpenAI(
     temperature=0,
@@ -19,6 +26,23 @@ llm = ChatOpenAI(
 
 client = OpenAI(api_key=OPENAI_API_KEY)
 
+MAX_CONTEXT_DOCS = 3
+MAX_CHARS_PER_DOC = 1500
+
+
+def _truncate_documents(documents, max_docs=MAX_CONTEXT_DOCS, max_chars=MAX_CHARS_PER_DOC):
+    """Keep context small by trimming the number and length of documents."""
+    if not isinstance(documents, list):
+        documents = [documents]
+
+    trimmed = []
+    for doc in documents[:max_docs]:
+        text = doc if isinstance(doc, str) else str(doc)
+        if max_chars and len(text) > max_chars:
+            text = text[:max_chars].rstrip() + "..."
+        trimmed.append(text)
+    return trimmed
+
 '''
 Here, three different versions of the fetchGptResponse function are defined.
 From the average of testing the time taken for each version, here are the average time:
@@ -28,11 +52,52 @@ fetchGptResponse: 3.762374473
 '''
 
 
-async def fetchGptResponse(query, role, data=[]):
+async def fetchGptResponse(query, role, data=None):
+    # Build a context for rendering templates
+    context = {}
+    if data is None:
+        data = []
+        
+    if isinstance(data, dict):
+        context.update(data)
+
+    # ensure common keys are available
+    context.setdefault('query', query)
+    # handle alternate keys
+    if 'relevant_messages' in context and 'relevant_documents' not in context:
+        context['relevant_documents'] = context['relevant_messages']
+
+    # Trim large collections before converting to strings
+    for key in ('relevant_documents', 'relevant_messages', 'rubric'):
+        if key in context and context[key]:
+            context[key] = _truncate_documents(context[key])
+
+    # Render the role prompt if it contains template placeholders.
+    role_rendered = role
+    try:
+        if '{{' in role and '}}' in role:
+            role_rendered = Template(role).render(**context)
+        elif '{' in role and '}' in role:
+            # safe formatting: missing keys become empty string
+            class SafeDict(dict):
+                def __missing__(self, key):
+                    return ''
+            role_rendered = role.format_map(SafeDict(context))
+    except Exception as e:
+        # fallback to original role on any render error
+        logging.info(f'fetchGPT role error: {e}')
+        role_rendered = role
+
+    # If we rendered the role template, don't append raw data again (to avoid duplication).
+    if role_rendered != role:
+        system_content = role_rendered
+    else:
+        system_content = f"{role} Here are the relevant information {str(data)}."
+
     response = await asyncio.to_thread(
         llm.invoke,
         [
-            ("system", f"{role} Here are the relevant information {str(data)}."),
+            ("system", system_content),
             ("user", query)
         ]
     )
