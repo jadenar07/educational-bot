@@ -1,8 +1,8 @@
 
 import asyncio
-from src.database.crudChroma import CRUD                  
+from src.databases.chroma.crudChroma import CRUD                  
 from src.router.semanticRouter import SemanticRouter  
-from backend.modelsPydantic import QueryRequest 
+from src.backend.modelsPydantic import QueryRequest 
 
 async def main():
     crud = CRUD()                             # might be used by the router's handler
