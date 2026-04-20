@@ -8,7 +8,7 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 from utlis.config import OPENAI_API_KEY
 from utlis.prompts import PROMPTS
 from backend.modelsPydantic import QueryRequest
-from database.modelsChroma import generate_embedding
+from databases.chroma.modelsChroma import generate_embedding
 from services.queryLangchain import fetchGptResponse
 from router.utterances import UTTERANCES
 

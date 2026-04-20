@@ -1,7 +1,7 @@
 import os, json, httpx, discord, logging
 import numpy as np 
 from profanity_check import predict_prob
-from database.modelsChroma import (
+from databases.chroma.modelsChroma import (
     GuildInfo, ChannelInfo, MemberInfoChannel
 )
 from services.nlpTools import TextProcessor
@@ -130,6 +130,7 @@ async def available_commands():
 
 # Calculate the profanity score of a message
 async def profanity_checker(messages):
+    #TODO: ask jaden if we should be adding the messages to contents twice
     contents = [message for message in messages]
     # save the content in a list; message should be a str
     for message in messages:
