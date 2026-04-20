@@ -10,6 +10,7 @@ from community_apps.discordHelper import (
     profanity_checker
 )
 from community_apps.botControlPlane import control_plane, BotState
+from community_apps.botDegradation import get_fallback_message, command_buffer, admin_alerts
 from backend.modelsPydantic import Message, UpdateChatHistory
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
@@ -27,6 +28,10 @@ class DiscordBot:
         async def on_ready():
             await self.tree.sync()
             logging.info(f'We have logged in as {self.bot.user}')
+
+            # configure admin alerts with bot instance and optional admin channel
+            admin_channel_id = int(os.getenv("ADMIN_CHANNEL_ID", "0")) or None
+            admin_alerts.configure(self.bot, admin_channel_id)
 
             # startup handshake to establish session and start heartbeat loop
             success = await control_plane.handshake()
@@ -70,7 +75,9 @@ class DiscordBot:
         @self.tree.command(name="setup", description="Use ONCE to set up the server information and update chat history")
         async def setup(interaction: discord.Interaction):
             if not control_plane.is_command_allowed():
-                await interaction.response.send_message("Bot is currently unavailable. Please try again later.")
+                command_buffer.add(interaction.user.name, interaction.user.id, "setup")
+                msg = get_fallback_message(control_plane.state.value.lower(), control_plane.flags)
+                await interaction.response.send_message(msg)
                 return
             await self.update_server_info(interaction)
 
@@ -92,7 +99,9 @@ class DiscordBot:
         @self.tree.command(name="load", description="Use ONCE to load course materials from course website")
         async def load_pdf(interaction: discord.Interaction):
             if not control_plane.is_command_allowed():
-                await interaction.response.send_message("Bot is currently unavailable. Please try again later.")
+                command_buffer.add(interaction.user.name, interaction.user.id, "load")
+                msg = get_fallback_message(control_plane.state.value.lower(), control_plane.flags)
+                await interaction.response.send_message(msg)
                 return
             await interaction.response.send_message("Loading PDFs from the course website...")
             response = await send_to_app("load_course_materials", data={})
@@ -105,7 +114,9 @@ class DiscordBot:
         @app_commands.describe(query="The query you want to ask")
         async def resource(interaction: discord.Interaction, query: str):
             if not control_plane.is_command_allowed():
-                await interaction.response.send_message("Bot is currently unavailable. Please try again later.")
+                command_buffer.add(interaction.user.name, interaction.user.id, "resource", query)
+                msg = get_fallback_message(control_plane.state.value.lower(), control_plane.flags)
+                await interaction.response.send_message(msg)
                 return
             await self.handle_query(interaction, 'resource_query', query)
 
@@ -113,7 +124,9 @@ class DiscordBot:
         @app_commands.describe(query="The query you want to ask")
         async def channel(interaction: discord.Interaction, query: str):
             if not control_plane.is_command_allowed():
-                await interaction.response.send_message("Bot is currently unavailable. Please try again later.")
+                command_buffer.add(interaction.user.name, interaction.user.id, "channel", query)
+                msg = get_fallback_message(control_plane.state.value.lower(), control_plane.flags)
+                await interaction.response.send_message(msg)
                 return
             await self.handle_query(interaction, 'channel_query', query)
 
@@ -209,6 +222,10 @@ class DiscordBot:
         asyncio.create_task(update_message(message_info, self.bot.user))
         
         response = await send_to_app(query_type, data)
+
+        if response is None:
+            await interaction.followup.send(get_fallback_message("api_error"))
+            return
 
         if response.status_code == 200:
             if isinstance(response.json().get('answer', {}), str):
