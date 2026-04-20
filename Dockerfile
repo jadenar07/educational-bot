@@ -25,7 +25,9 @@ RUN mkdir -p /app/pdfs \
     && export PDF_OUTPUT_DIR=/app/pdfs \
     && python src/services/getPdfs.py \
     && echo "Python script finished. Verifying contents of /app/pdfs:" \
-    && ls -l /app/pdfs
+    && ls -l /app/pdfs \
+    && if [ -z "$(ls -A /app/pdfs)" ]; then echo "ERROR: /app/pdfs is empty after getPdfs.py execution! PDF download failed."; exit 1; fi \
+    && echo "SUCCESS: /app/pdfs populated with PDFs"
 
 # Create entrypoint script to run migrations and start app
 RUN echo '#!/bin/bash\n\
