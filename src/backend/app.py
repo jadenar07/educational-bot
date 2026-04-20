@@ -147,21 +147,28 @@ async def update_info(request: Union[UpdateGuildInfo, UpdateChannelInfo, UpdateM
 
 @app.post('/load_course_materials')
 async def load_course_materials():
-    file_path = "./data/pdf_files"
+    file_path = os.getenv('PDF_OUTPUT_DIR', '/app/pdfs')
+    logging.info(f"load_course_materials: Using PDF_OUTPUT_DIR={file_path}")
     collection_name = "course_materials"
     try:
         data = await crud.save_pdfs(file_path, collection_name)
+
+        # Check if data is None or empty
+        if not data:
+            logging.warning(f"No PDF data returned from save_pdfs. Directory may be empty or not exist.")
+            return {"message": "No PDFs found to load.", "status": "warning"}
 
         # save the data to the database in chunks of ten documents
         chunk_size = 10
         for i in range(0, len(data), chunk_size):
             await crud.save_to_db(data[i:i+chunk_size])
 
-        return {"message": "PDFs loaded successfully."}
+        logging.info(f"Successfully loaded {len(data)} PDF chunks into Chroma.")
+        return {"message": f"PDFs loaded successfully. {len(data)} chunks saved."}
     
     except Exception as e:
         logging.error(f"app.py: Error with loading PDFs: {e}")
-        return {"message": "Failed to load PDFs."}
+        return {"message": f"Failed to load PDFs: {str(e)}", "status": "error"}, 500
 
 if __name__ == '__main__':
     uvicorn.run(app, host='0.0.0.0', port=8000)

@@ -1,5 +1,5 @@
 # crudChroma.py
-import chromadb, uuid, os, urllib.parse, asyncio
+import chromadb, uuid, os, urllib.parse, asyncio, logging
 
 
 from utlis.config import DB_PATH
@@ -71,15 +71,30 @@ class CRUD():
             return []
     
     async def save_pdfs(self, file_path, collection_name):
+        # Use file_path as-is (already absolute from caller)
+        if not file_path:
+            file_path = '/app/pdfs'
+        
         print(f"Saving PDFs from {file_path} to collection {collection_name}")
+        logging.info(f"save_pdfs: Looking for PDFs at {file_path}")
+        
+        # Check if directory exists
+        if not os.path.exists(file_path):
+            error_msg = f"Directory not found: {file_path}"
+            print(f"crudChroma.py: Error with loading PDFs: {error_msg}")
+            logging.error(f"crudChroma.py: {error_msg}")
+            return []  # Return empty list instead of None
+        
         # Get the files
         try:
             loader = DirectoryLoader(file_path, glob = "*.pdf", show_progress = True)
             docs = loader.load()
+            logging.info(f"save_pdfs: Successfully loaded {len(docs)} PDF documents")
 
         except Exception as e:
             print(f"crudChroma.py: Error with loading PDFs: {e}")
-            return
+            logging.error(f"crudChroma.py: Error with loading PDFs from {file_path}: {e}")
+            return []  # Return empty list instead of None
         
 
         # split the text 
