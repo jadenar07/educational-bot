@@ -1,5 +1,5 @@
 import logging
-from fastapi import APIRouter, Header, HTTPException
+from fastapi import APIRouter, Header, HTTPException, Request
 
 from backend.modelsPydantic import (
     BotHandshakeRequest, BotHandshakeResponse,
@@ -15,10 +15,11 @@ session_manager = SessionManager()
 
 
 @router.post("/bot/handshake", response_model=BotHandshakeResponse)
-async def handshake(request: BotHandshakeRequest, x_correlation_id: str = Header(None)):
+async def handshake(request: BotHandshakeRequest, raw_request: Request):
+    cid = raw_request.headers.get("x-correlation-id", "none")
 
     if request.shared_secret != BOT_SHARED_SECRET:
-        logger.warning(f"Handshake failed: invalid secret for bot_id={request.bot_id} cid={x_correlation_id}")
+        logger.warning(f"Handshake failed: invalid secret for bot_id={request.bot_id} [cid={cid}]")
 
         raise HTTPException(status_code=401, detail=BotProtocolErrorResponse(
             error_code=BotProtocolErrorCode.INVALID_SECRET,
@@ -26,7 +27,7 @@ async def handshake(request: BotHandshakeRequest, x_correlation_id: str = Header
         ).model_dump())
 
     if FLAGS.get("maintenance_mode"):
-        logger.info(f"Handshake rejected: maintenance mode for bot_id={request.bot_id} cid={x_correlation_id}")
+        logger.info(f"Handshake rejected: maintenance mode for bot_id={request.bot_id} [cid={cid}]")
 
         raise HTTPException(status_code=503, detail=BotProtocolErrorResponse(
             error_code=BotProtocolErrorCode.API_MAINTENANCE,
@@ -36,7 +37,7 @@ async def handshake(request: BotHandshakeRequest, x_correlation_id: str = Header
 
     token = session_manager.create_session(request.bot_id, request.version, request.capabilities)
     session = session_manager.get_session(token)
-    logger.info(f"Handshake success for bot_id={request.bot_id} cid={x_correlation_id}")
+    logger.info(f"Handshake success for bot_id={request.bot_id} [cid={cid}]")
 
     return BotHandshakeResponse(
         session_token=token,
@@ -47,12 +48,13 @@ async def handshake(request: BotHandshakeRequest, x_correlation_id: str = Header
 
 
 @router.post("/bot/heartbeat", response_model=BotHeartbeatResponse)
-async def heartbeat(request: BotHeartbeatRequest, x_bot_session: str = Header(...), x_correlation_id: str = Header(None)):
+async def heartbeat(request: BotHeartbeatRequest, raw_request: Request, x_bot_session: str = Header(...)):
+    cid = raw_request.headers.get("x-correlation-id", "none")
 
     session_status = session_manager.validate_session(x_bot_session)
 
     if session_status == "revoked":
-        logger.warning(f"Heartbeat rejected: revoked session for bot_id={request.bot_id} cid={x_correlation_id}")
+        logger.warning(f"Heartbeat rejected: revoked session for bot_id={request.bot_id}")
 
         raise HTTPException(status_code=401, detail=BotProtocolErrorResponse(
             error_code=BotProtocolErrorCode.SESSION_REVOKED,
@@ -60,7 +62,7 @@ async def heartbeat(request: BotHeartbeatRequest, x_bot_session: str = Header(..
         ).model_dump())
 
     if session_status != "valid":
-        logger.warning(f"Heartbeat rejected: invalid session for bot_id={request.bot_id} cid={x_correlation_id}")
+        logger.warning(f"Heartbeat rejected: invalid session for bot_id={request.bot_id}")
 
         raise HTTPException(status_code=401, detail=BotProtocolErrorResponse(
             error_code=BotProtocolErrorCode.SESSION_EXPIRED,
@@ -69,7 +71,7 @@ async def heartbeat(request: BotHeartbeatRequest, x_bot_session: str = Header(..
 
     session = session_manager.get_session(x_bot_session)
     if session.bot_id != request.bot_id:
-        logger.warning(f"Heartbeat rejected: bot_id mismatch for token_bot={session.bot_id} req_bot={request.bot_id} cid={x_correlation_id}")
+        logger.warning(f"Heartbeat rejected: bot_id mismatch for token_bot={session.bot_id} req_bot={request.bot_id}")
 
         raise HTTPException(status_code=403, detail=BotProtocolErrorResponse(
             error_code=BotProtocolErrorCode.BOT_ID_MISMATCH,
@@ -77,14 +79,13 @@ async def heartbeat(request: BotHeartbeatRequest, x_bot_session: str = Header(..
         ).model_dump())
 
     session_manager.update_heartbeat(x_bot_session, request.latency, request.stats)
-    logger.info(f"Heartbeat ok: bot_id={request.bot_id} latency={request.latency}ms cid={x_correlation_id}")
+    logger.info(f"Heartbeat ok: bot_id={request.bot_id} latency={request.latency}ms [cid={cid}]")
 
     return BotHeartbeatResponse(bot_id=request.bot_id, flags=FLAGS)
 
 
 @router.get("/bot/status")
-async def status(x_correlation_id: str = Header(None)):
-    logger.info(f"Status check cid={x_correlation_id}")
+async def status():
     active = session_manager.get_active_sessions()
     return {
           "active_bots": [
@@ -99,9 +100,12 @@ async def status(x_correlation_id: str = Header(None)):
     }
 
 
-#TODO: should i keep this? useful for monitoring but adds complexity
 @router.post("/bot/toggle-flags")
-async def toggle_flags(maintenance: bool = None, read_only: bool = None, version_mismatch: bool = None):
+async def toggle_flags(
+    maintenance: bool = None,
+    read_only: bool = None,
+    version_mismatch: bool = None,
+):
     if maintenance is not None:
         FLAGS["maintenance_mode"] = maintenance
     if read_only is not None:
