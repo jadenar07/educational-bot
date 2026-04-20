@@ -1,6 +1,6 @@
 import requests, os, asyncio, logging, csv
-from aspose.slides import Presentation
-from aspose.slides.export import SaveFormat
+#from aspose.slides import Presentation
+#from aspose.slides.export import SaveFormat
 from pyppeteer import launch
 from bs4 import BeautifulSoup
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -9,8 +9,8 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 # Set up logging
 logging.basicConfig(level=logging.INFO, format='%(levelname)s: %(message)s')
 
-PDF_FOLDER = 'pdf_files'
-PPTX_FOLDER = 'pptx_files'
+PDF_FOLDER = os.getenv('PDF_OUTPUT_DIR', '/app/pdfs')
+PPTX_FOLDER = '/app/pptx_files'
 URL_FILENAME = 'hyperlinks.csv'
 CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
 
@@ -21,6 +21,11 @@ def get_all_hyperlinks(url, base_link):
 
         soup = BeautifulSoup(response.content, 'html.parser')
         anchor_tags = soup.find_all('a')
+
+        if not anchor_tags:
+            logging.warning(f"No anchor tags found at {url}")
+            return []
+        logging.info(f"Found {len(anchor_tags)} anchor tags at {url}")
         
         hyperlinks = []
         for a in anchor_tags:
@@ -42,10 +47,10 @@ def get_all_hyperlinks(url, base_link):
         return []
 
 def filter_links(hyperlinks, base_link):
+    """Filter hyperlinks by URL (first element of tuple)"""
     filtered_links = [
-        link for link in hyperlinks if '#' not in link and 
-        base_link in link and 
-        'php?' not in link
+        link for link in hyperlinks if '#' not in link[0] and 
+        base_link in link[0]
     ]
     return filtered_links
 
@@ -132,33 +137,51 @@ def match_filenames_to_urls(filenames, urls_with_texts):
 # ---------------------------- Main function ----------------------------
 
 def main():
-    url = 'https://manual.eg.poly.edu/index.php/Main_Page'
-    base_link = 'https://manual.eg.poly.edu'
+    # url = 'https://manual.eg.poly.edu/index.php/Main_Page'
+    # base_link = 'https://manual.eg.poly.edu'
+
+    url = 'https://engineering.nyu.edu/academics/departments/computer-science-and-engineering'
+    base_link = 'https://engineering.nyu.edu/'
+
+    print(f"[getPdfs] Starting PDF download process...")
+    print(f"[getPdfs] PDF_FOLDER = {PDF_FOLDER}")
+    logging.info(f"getPdfs: Starting PDF download, outputting to {PDF_FOLDER}")
 
     hyperlinks = get_all_hyperlinks(url, base_link)
     hyperlinks = filter_links(hyperlinks, base_link)
+    
+    print(f"[getPdfs] Found {len(hyperlinks)} hyperlinks after filtering")
+    # Cap at 10 links to avoid long build times
+    hyperlinks = hyperlinks[:10]
+    
+    print(f"[getPdfs] Found {len(hyperlinks)} hyperlinks (capped at 10)")
+    logging.info(f"getPdfs: Found {len(hyperlinks)} hyperlinks to process")
 
     # create_folders(PPTX_FOLDER, PDF_FOLDER, PDF_FOLDER)
 
     # # get the hyperlinks that are pptx and download them
-    # pptx_links = [link for link in hyperlinks if link.endswith('.pptx')]
+    # pptx_links = [link[0] for link in hyperlinks if link[0].endswith('.pptx')]
     # for link in pptx_links:
     #     download_file(link, PPTX_FOLDER)
 
     # convert_all_pptx_in_folder(PPTX_FOLDER, PDF_FOLDER)
 
     # # get the hyperlinks that are pdf and download them
-    # pdf_links = [link for link in hyperlinks if link.endswith('.pdf')]
-    # for link in pdf_links:
-    #     download_file(link, PDF_FOLDER)
+    pdf_links = [link[0] for link in hyperlinks if link[0].endswith('.pdf')]
+    print(f"[getPdfs] Downloading {len(pdf_links)} PDF files...")
+    for link in pdf_links:
+        download_file(link, PDF_FOLDER)
+    print(f"[getPdfs] Finished downloading PDF files")
 
     # # get the hyperlinks that are webpages and convert them to pdf
-    # webpage_links = [link for link in hyperlinks if not link.endswith('.pdf') and not link.endswith('.pptx')]
-    # loop = asyncio.get_event_loop()
-    # for link in webpage_links:
-    #     local_filename = link.split('/')[-1] + '.pdf'
-    #     pdf_path = os.path.join(PDF_FOLDER, local_filename)
-    #     loop.run_until_complete(convert_webpage_as_pdf(link, pdf_path))
+    webpage_links = [link[0] for link in hyperlinks if not link[0].endswith('.pdf') and not link[0].endswith('.pptx')]
+    print(f"[getPdfs] Converting {len(webpage_links)} webpages to PDF...")
+    loop = asyncio.get_event_loop()
+    for link in webpage_links:
+        local_filename = link.split('/')[-1] + '.pdf'
+        pdf_path = os.path.join(PDF_FOLDER, local_filename)
+        loop.run_until_complete(convert_webpage_as_pdf(link, pdf_path))
+    print(f"[getPdfs] PDF processing complete!")
 
 if __name__ == "__main__":
     main()
