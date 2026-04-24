@@ -3,8 +3,11 @@ from typing import Dict, Optional, Any
 import uuid
 import json
 import os
+import logging
 
 from utlis.botProtocolConfig import SESSION_TTL
+
+logger = logging.getLogger(__name__)
 
 SESSIONS_FILE = "local_chromadb/sessions.json"
 
@@ -63,10 +66,8 @@ class SessionManager:
                 session.revoked = session_dict.get("revoked", False)
                 
                 self.sessions[token] = session
-                
         except Exception as e:
-            print(f"Warning: Could not load sessions from file: {e}")
-
+            logger.warning(f"Could not load sessions from file: {e}")
     def _save_to_file(self):
         """Save sessions to JSON file"""
         try:
@@ -89,7 +90,7 @@ class SessionManager:
             with open(SESSIONS_FILE, "w") as f:
                 json.dump(data, f, indent=2)
         except Exception as e:
-            print(f"Warning: Could not save sessions to file: {e}")
+            logger.error(f"Could not save sessions to file: {e}")
 
 
     def create_session(self, bot_id: str, version: str, capabilities: list[str]) -> str:
