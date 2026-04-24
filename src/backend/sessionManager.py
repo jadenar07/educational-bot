@@ -1,8 +1,12 @@
 from datetime import datetime, timedelta
 from typing import Dict, Optional, Any
 import uuid
+import json
+import os
 
 from utlis.botProtocolConfig import SESSION_TTL
+
+SESSIONS_FILE = "local_chromadb/sessions.json"
 
 
 class SessionData:
@@ -17,11 +21,75 @@ class SessionData:
         self.stats: Dict[str, Any] = {}
         self.revoked: bool = False
 
-#TODO: currently everything is store in a dictionary as jaden how to do persistent storage for sessions. audit_logger?
+
 class SessionManager:
     def __init__(self, session_ttl: timedelta = SESSION_TTL):
         self.sessions: Dict[str, SessionData] = {}
         self.session_ttl = session_ttl
+        self._load_from_file()
+
+    # load sessions from JSON file in db on startup
+    def _load_from_file(self):
+        
+        if not os.path.exists(SESSIONS_FILE):
+            return
+        
+        try:
+            with open(SESSIONS_FILE, "r") as f:
+                data = json.load(f)
+            
+            now = datetime.now()
+            for token, session_dict in data.items():
+                expires_at = datetime.fromisoformat(session_dict["expires_at"])
+                
+                # Skip expired sessions
+                if expires_at < now:
+                    continue
+                
+                session = SessionData(
+                    bot_id=session_dict["bot_id"],
+                    version=session_dict["version"],
+                    capabilities=session_dict["capabilities"],
+                    expires_at=expires_at,
+                )
+
+                session.created_at = datetime.fromisoformat(session_dict["created_at"])
+
+                if session_dict.get("last_heartbeat"):
+                    session.last_heartbeat = datetime.fromisoformat(session_dict["last_heartbeat"])
+
+                session.last_latency = session_dict.get("last_latency")
+                session.stats = session_dict.get("stats", {})
+                session.revoked = session_dict.get("revoked", False)
+                
+                self.sessions[token] = session
+                
+        except Exception as e:
+            print(f"Warning: Could not load sessions from file: {e}")
+
+    def _save_to_file(self):
+        """Save sessions to JSON file"""
+        try:
+            os.makedirs(os.path.dirname(SESSIONS_FILE) or ".", exist_ok=True)
+            
+            data = {}
+            for token, session in self.sessions.items():
+                data[token] = {
+                    "bot_id": session.bot_id,
+                    "version": session.version,
+                    "capabilities": session.capabilities,
+                    "created_at": session.created_at.isoformat(),
+                    "expires_at": session.expires_at.isoformat(),
+                    "last_heartbeat": session.last_heartbeat.isoformat() if session.last_heartbeat else None,
+                    "last_latency": session.last_latency,
+                    "stats": session.stats,
+                    "revoked": session.revoked,
+                }
+            
+            with open(SESSIONS_FILE, "w") as f:
+                json.dump(data, f, indent=2)
+        except Exception as e:
+            print(f"Warning: Could not save sessions to file: {e}")
 
 
     def create_session(self, bot_id: str, version: str, capabilities: list[str]) -> str:
@@ -35,7 +103,8 @@ class SessionManager:
         
         token = str(uuid.uuid4())
         self.sessions[token] = session
-
+        
+        self._save_to_file()
         return token
 
 
@@ -52,6 +121,7 @@ class SessionManager:
             return "revoked"
         if session.expires_at < datetime.now():
             self.sessions.pop(token, None)
+            self._save_to_file()
             return "expired"
 
         return "valid"
@@ -61,6 +131,7 @@ class SessionManager:
         session = self.get_session(token)
         if session:
             session.revoked = True
+            self._save_to_file()
 
 
     def update_heartbeat(self, token: str, latency: float, stats: Optional[Dict[str, Any]] = None):
@@ -75,6 +146,8 @@ class SessionManager:
 
         if stats:
             session.stats.update(stats)
+        
+        self._save_to_file()
 
 
     def cleanup_expired_sessions(self):
@@ -83,6 +156,9 @@ class SessionManager:
 
         for token in expired_tokens:
             self.sessions.pop(token, None)
+        
+        if expired_tokens:
+            self._save_to_file()
 
 
     def get_active_sessions(self) -> Dict[str, SessionData]:
