@@ -5,7 +5,7 @@ from psycopg2.extras import RealDictCursor #changes fetch returns to a dict
 from dotenv import load_dotenv
 import logging
 
-load_dotenv()
+load_dotenv(override = True)
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
@@ -19,8 +19,8 @@ class PostgresCRUD():
             cls._pool = pool.SimpleConnectionPool(
                 1,  # Minimum 1 connection
                 20,  # Maximum 20 connections
-                dbname=os.getenv("POSTGRES_DB"),
-                user=os.getenv("POSTGRES_USER"),
+                dbname=os.getenv("POSTGRES_DB","educational-bot"),
+                user=os.getenv("POSTGRES_USER","postgres"),
                 password=os.getenv("POSTGRES_PASSWORD"),
                 host=os.getenv("POSTGRES_HOST"),
                 port=os.getenv("POSTGRES_PORT"),
@@ -51,6 +51,7 @@ class PostgresCRUD():
         if role not in valid_roles:
             logger.error(f"Invalid role provided: {role}")
             return {"success": False, "error": "Invalid role"}
+        current_connection= self.get_connection()
         try:
             with db.cursor() as cur:
                 cur.execute("""
@@ -63,6 +64,7 @@ class PostgresCRUD():
                 logger.info(f"User created with ID: {user_id}")
                 return {"success": True, "message": "User created successfully!", "data": user_id}
         except psycopg2.Error as e:
+            current_connection.rollback()
             logger.error(f"Error creating user: {e}")
             return {"success": False, "error": "User creation failed", "details": str(e)}
 
@@ -80,7 +82,7 @@ class PostgresCRUD():
         if not candidates:
             logger.warning("No valid identifier provided for get_user")
             return {"success": False, "error": "Provide user_id, email, or username"}
-
+        current_connection = self.get_connection()
         try:
             with db.cursor() as cur:
                 for field, value in candidates:
@@ -90,6 +92,7 @@ class PostgresCRUD():
                         if user is not None:
                             return {"success": True, "data": user}
         except psycopg2.Error as e:
+            current_connection.rollback() #adding a rollback to 
             logger.error(f"Error fetching user: {e}")
             return {"success": False, "error": "Database query failed", "details": str(e)}
 

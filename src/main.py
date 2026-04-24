@@ -2,7 +2,8 @@ import asyncio, uvicorn, sys, os, discord, subprocess
 from discord.ext import commands
 from community_apps.getMessageDiscord import DiscordBot
 from backend.app import app as fastapi_app
-
+import httpx
+import logging
 from utlis.config import DISCORD_TOKEN
 
 
@@ -20,6 +21,69 @@ bot = commands.Bot(command_prefix="!", intents=intents)
 
 # Initialize your Discord bot class 
 discord_bot = DiscordBot(bot)
+FASTAPI_URL= "http://127.0.0.1:8000"
+
+@bot.event
+async def on_ready():
+    """This is Triggered when the bot successfully boots up. Runs the Batch Sync."""
+    logging.info(f"Logged in as {bot.user}. Starting batch user sync...")
+    
+    users_to_sync = []
+    
+    # Loop through all members in all servers the bot is connected to
+    for guild in bot.guilds:
+        for member in guild.members:
+            if not member.bot: # Ignore other bots
+                users_to_sync.append({
+                    "username": str(member.id),
+                    "email": f"{member.id}@discord.local",
+                    "role": "student",
+                    "default_collection": "general"
+                })
+    
+    # Send the batch to FastAPI
+    if users_to_sync:
+        async with httpx.AsyncClient() as client:
+            try:
+                response = await client.post(
+                    f"{FASTAPI_URL}/api/users/batch", 
+                    json=users_to_sync,
+                    timeout=30.0 
+                )
+                if response.status_code == 200:
+                    logging.info(f"Batch sync complete! Synced {len(users_to_sync)} users.")
+                else:
+                    logging.error(f"Batch sync returned status: {response.status_code}")
+            except Exception as e:
+                logging.error(f"Batch sync failed to connect to API: {e}")
+
+
+@bot.event
+async def on_member_join(member):
+    """This is Triggered automatically when a new user joins the Discord server."""
+    logging.info(f"New member joined: {member.name}. Sending to API...")
+    
+    if member.bot:
+        return # Don't register other bots
+        
+    user_payload = {
+        "username": str(member.id),
+        "email": f"{member.id}@discord.local", 
+        "role": "student", 
+        "default_collection": "general"
+    }
+    
+    async with httpx.AsyncClient() as client:
+        try:
+            response = await client.post(f"{FASTAPI_URL}/api/users", json=user_payload)
+            if response.status_code == 200:
+                logging.info(f"Successfully registered {member.name} in PostgreSQL.")
+            else:
+                logging.error(f"Failed to register user. Status: {response.status_code}")
+        except Exception as e:
+            logging.error(f"Could not connect to FastAPI backend: {e}")
+
+
 
 # Function to run FastAPI server
 async def run_fastapi():

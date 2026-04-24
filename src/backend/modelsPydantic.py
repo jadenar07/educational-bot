@@ -56,4 +56,18 @@ class UpdateChannelList(BaseModel):
     user_name: str
     guild_id: int
     channel_ids: List[int]
+
+class UserCreate(BaseModel):
+    username: str
+    email: str
+    role: str 
+    default_collection: Optional[str] = None
+
+class UserResponse(BaseModel):
+    id: int 
+    username: str
+    email: str
+    role: str
+    default_collection: Optional[str] = None
+
     

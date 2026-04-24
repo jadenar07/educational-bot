@@ -2,11 +2,11 @@
 
 import httpx, uvicorn, chromadb, time
 
-from typing import Union
+from typing import Union,List,Any
 import sys
 import os
 import logging
-from fastapi import FastAPI, HTTPException  
+from fastapi import FastAPI,Depends, HTTPException  
 from backend.middleware.role_middleware import RoleMiddleware
 from starlette.requests import Request
 
@@ -24,7 +24,15 @@ from databases.chroma.modelsChroma import (
 )
 from databases.postgres.crudPostgres import PostgresCRUD
 from utlis.prompts import PROMPTS
+from .modelsPydantic import UserCreate, UserResponse
 
+# This tells FastAPI how to get and return your Postgres connection
+def get_db():
+    db = postgres_crud.get_connection()
+    try:
+        yield db
+    finally:
+        postgres_crud.return_connection(db)
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 
 app = FastAPI()
@@ -166,7 +174,72 @@ async def load_course_materials():
     except Exception as e:
         logging.error(f"app.py: Error with loading PDFs: {e}")
         return {"message": "Failed to load PDFs."}
+@app.post("/api/users", response_model = UserResponse)
+async def create_discord_user(user_data: UserCreate, db: Any = Depends(get_db)):
+    existing_user = postgres_crud.get_user(db=db, username=user_data.username)
+    #Check if user already exists
+    if existing_user.get("success") == True:
+        logging.info(f"User {user_data.username} already exists. Returning existing record.")
+        # Return ONLY the "data" dictionary, which holds the real user info FastAPI wants
+        return existing_user["data"]
+    #Use the class method to create the user
+    new_user = postgres_crud.create_user(
+        db=db, 
+        username=user_data.username,
+        email=user_data.email,
+        role=user_data.role,
+        default_collection=user_data.default_collection
+    )
+    if new_user.get("success") == True:
+        logging.info(f"Successfully created new user: {user_data.username}")
+        # Your create_user function only returns the new ID inside "data". 
+        # To satisfy UserResponse, we quickly fetch the full user object we just created!
+        new_user_id = new_user["data"]
+        return postgres_crud.get_user(db=db, user_id=new_user_id)["data"]
+    
+    # 4. If creation failed for some reason, throw a proper HTTP error
+    raise HTTPException(status_code=400, detail=new_user.get("error", "Failed to create user"))
+@app.get("/api/users/{username}", response_model=UserResponse)
+async def get_discord_user(username: str, db: Any = Depends(get_db)):
+    """Fetches a specific user by their Discord username."""
+    user = postgres_crud.get_user(db=db, username=username)
+    
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+        
+    # get_user might return a list of candidates based on your code, so we grab the first one
+    return user[0] if isinstance(user, list) else user
 
+
+@app.post("/api/users/batch", response_model=List[UserResponse])
+async def create_users_batch(users_data: List[UserCreate], db: Any = Depends(get_db)):
+    """Handles creating multiple users at once (Batch Operations)."""
+    processsed_users = []
+    
+    for user_data in users_data:
+        existing_user = postgres_crud.get_user(db=db, username=user_data.username)
+        
+        if existing_user.get("success") == True:
+            # If it returns a list, grab the first candidate
+            processsed_users.append(existing_user["data"])
+        else:
+            new_user = postgres_crud.create_user(
+                db=db, 
+                username=user_data.username,
+                email=user_data.email,
+                role=user_data.role,
+                default_collection=user_data.default_collection
+            )
+            if new_user.get("success")==True:
+                new_user_id = new_user["data"]
+                full_new_user = postgres_crud.get_user(db=db, user_id= new_user_id)
+                if full_new_user.get("success") == True: 
+                    processsed_users.append(full_new_user["data"])
+            else:
+                logging.error(f"Failed to create user {user_data.username}: {new_user.get('error')}")
+            
+    logging.info(f"Batch processed {len(processsed_users)} out of {len(users_data)} users.")
+    return processsed_users
 @app.post("/query")
 async def query_endpoint(request: Request, body: QueryRequest):
     user_role = getattr(request.state, "user_role", "student")  # fallback to student
