@@ -1,0 +1,186 @@
+#API Overview and Mapping
+
+This document provides a reference for all FastAPI routes defined in `app.py`.
+It explains what each endpoint does, the request format, responses, and database interactions.
+
+--------------------------------------------------------------------------------
+
+End points at a glance:
+## Endpoints
+
+POST /channel_query  
+POST /resource_query  
+POST /update_chat_history  
+POST /update_info  
+POST /load_course_materials
+
+
+
+
+
+
+
+
+
+
+
+###Query Endpoints:
+
+# POST / channel_query
+
+Description: answers questions to do with a specific Discord channel by retreiving the relevant chat messages and information 
+
+Requests:
+- guild_id: int
+- channel_id: int
+- query: str
+
+Response:
+{
+  "answer": string
+}
+
+Side effects/interactions:
+reads from Chroma collections:
+- chat_history_{channel_id}
+- channel_info_{guild_id}
+
+
+# POST / resource_query
+
+Description: answers questions about a server resources by finding the relevant documents and info stored for a specific guild 
+
+Requests:
+- guild_id: int
+- channel_id: int
+- query: str
+
+Response:
+{
+  "answer": string
+}
+
+side effects/interactions: 
+Reads from ChromaDB course material collections via semantic router
+
+
+###Chat History
+
+# POST / update_chat_history
+
+Description: Uploads and stores Discord chat history messages into the vector database so that they can be used for queries in the future
+
+Requests:
+all_messages: Dict[int, List[Message]]
+
+Message class:
+- channel_id: int
+- channel_name: str
+- message_id: int
+- author: str
+- author_id: int
+- content: str
+- timestamp: str
+- profanity_score: float
+
+Response:
+{
+  "status": "Update complete"
+}
+
+interactions/ side effects
+Writes message embeddings to ChromaDB collections:
+- chat_history_{channel_id}
+
+# POST / update_info
+
+Description:
+Updates stored Discord data either being guild info, channel info, member info, or channel lists.
+
+Request Body (One out of four):
+
+UpdateGuildInfo
+- guild_id: int
+- guild_name: string
+- guild_purpose: string
+- number_of_channels: int
+- number_of_members: int
+- profanity_score: float
+
+UpdateChannelInfo
+- channel_id: int
+- guild_id: int
+- channel_name: string
+- channel_purpose: string
+- number_of_messages: int
+- number_of_members: int
+
+UpdateMemberInfo
+- user_id: int
+- channel_id: int
+- channel_list_id: string
+- user_name: string
+- message_sent: int
+
+UpdateChannelList
+- user_id: int
+- user_name: string
+- guild_id: int
+- channel_ids: List[int]
+
+Response:
+{
+  "status": "Update complete"
+}
+
+Side Effects:
+Writes data embeddings to ChromaDB collections:
+- guild_info
+- channel_info_{guild_id}
+- member_info_{channel_id}
+- channel_list_{guild_id}
+
+
+###Materials
+
+# POST / load_course_materials
+
+Description: Loads course PDF's from file system, converts them into embeddings, and then embedds them in vector database to be retreived during resource queries 
+
+Requests: None
+
+Responses:
+{
+  "message": "PDFs loaded successfully."
+}
+
+OR
+
+{
+  "message": "Failed to load PDFs."
+}
+
+Side effects/ interactions:
+
+Reads PDF files from : ./data/pdf_files
+
+generates embeddings from document text,
+Stores documents in ChromaDB collection: course_materials
+
+
+# Keeping This Document Updated:
+
+This document should be updated whenever the API changes.
+
+Update this file when:
+- A new API endpoint is added to app.py
+- An existing endpoint changes its request body
+- An endpoint changes its response format
+- An endpoint begins interacting with new database collections
+
+
+Like done above, Each endpoint found should be documented with:
+- Description
+- Request body
+- Response
+- Side effects or interactions
