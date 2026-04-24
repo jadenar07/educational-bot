@@ -7,7 +7,7 @@ from utlis.config import DISCORD_TOKEN, PROFANITY_THRESHOLD
 from community_apps.discordHelper import (
     send_to_app, update_message, get_channels_and_messages, message_filter, available_commands,
     store_guild_info, store_channel_info, store_member_info, store_channel_list, get_parameters,
-    profanity_checker
+    profanity_checker, check_api_health
 )
 from backend.modelsPydantic import Message, UpdateChatHistory
 
@@ -96,6 +96,85 @@ class DiscordBot:
         async def channel(interaction: discord.Interaction, query: str):
             await self.handle_query(interaction, 'channel_query', query)
 
+        @self.tree.command(name="bot_status", description="Check backend health and connectivity")
+        async def bot_status(interaction: discord.Interaction):
+            await interaction.response.defer()
+            
+            try:
+                health_data = await check_api_health()
+                
+                status = health_data.get("status", "unknown")
+                
+                if status == "ok":
+                    color = discord.Color.green()
+                    status_emoji = "✅"
+                elif status == "degraded":
+                    color = discord.Color.yellow()
+                    status_emoji = "⚠️"
+                else:
+                    color = discord.Color.red()
+                    status_emoji = "❌"
+                
+                embed = discord.Embed(
+                    title=f"{status_emoji} Backend Status: {status.upper()}",
+                    color=color,
+                    timestamp=discord.utils.utcnow()
+                )
+                
+                if "latency_ms" in health_data:
+                    embed.add_field(
+                        name="Latency",
+                        value=f"{health_data['latency_ms']} ms",
+                        inline=True
+                    )
+                
+                if "version" in health_data:
+                    embed.add_field(
+                        name="Version",
+                        value=health_data.get("version", "N/A"),
+                        inline=True
+                    )
+                
+                if "build_hash" in health_data:
+                    build_hash = health_data.get("build_hash", "N/A")
+                    embed.add_field(
+                        name="Build",
+                        value=build_hash[:7] if len(build_hash) > 7 else build_hash,
+                        inline=True
+                    )
+                
+                checks = health_data.get("checks", {})
+                if checks:
+                    checks_text = "\n".join([
+                        f"{'✅' if v == 'ok' else '❌'} {k}: {v}" 
+                        for k, v in checks.items()
+                    ])
+                    embed.add_field(
+                        name="Component Health",
+                        value=checks_text,
+                        inline=False
+                    )
+                
+                if "error" in health_data:
+                    embed.add_field(
+                        name="Error Details",
+                        value=health_data["error"],
+                        inline=False
+                    )
+                    embed.set_footer(text="💡 If issues persist, notify #ops channel")
+                
+                await interaction.followup.send(embed=embed)
+                logging.info(f"Health check by {interaction.user}: status={status}")
+                
+            except Exception as e:
+                logging.error(f"Error in bot_status command: {e}")
+                embed = discord.Embed(
+                    title="❌ Backend Status: ERROR",
+                    description=f"Failed to check status: {str(e)}",
+                    color=discord.Color.red()
+                )
+                embed.set_footer(text="💡 Backend may be down. Notify #ops channel.")
+                await interaction.followup.send(embed=embed)
 
     async def update_server_info(self, interaction: discord.Interaction):
         logging.info("Updating server information and chat history to ChromaDB...")

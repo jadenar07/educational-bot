@@ -3,9 +3,17 @@
 import httpx, uvicorn, chromadb, time
 from fastapi import FastAPI, HTTPException
 from typing import Union
+from datetime import datetime, timezone
 import sys
 import os
 import logging
+
+APP_VERSION = os.getenv("APP_VERSION")
+try:
+    import subprocess
+    BUILD_HASH = subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip()
+except Exception:
+    BUILD_HASH = "dev"
 
 # from router.semanticRouter import process_query
 from router.semanticRouter import create_router
@@ -169,6 +177,39 @@ async def load_course_materials():
     except Exception as e:
         logging.error(f"app.py: Error with loading PDFs: {e}")
         return {"message": f"Failed to load PDFs: {str(e)}", "status": "error"}, 500
+
+
+@app.get('/health')
+async def health_check():
+    start_time = time.time()
+    health_status = {
+        "status": "ok",
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "version": APP_VERSION,
+        "build_hash": BUILD_HASH,
+        "checks": {}
+    }
+    
+    # Check ChromaDB connection
+    try:
+        crud.client.list_collections()
+        health_status["checks"]["chromadb"] = "ok"
+    except Exception as e:
+        health_status["checks"]["chromadb"] = f"error: {str(e)}"
+        health_status["status"] = "degraded"
+    
+    # Check Postgres connection
+    try:
+        await postgres_crud.ping()
+        health_status["checks"]["postgres"] = "ok"
+    except Exception as e:
+        health_status["checks"]["postgres"] = f"error: {str(e)}"
+        health_status["status"] = "degraded"
+    
+    health_status["response_time_ms"] = round((time.time() - start_time) * 1000, 2)
+    
+    return health_status
+
 
 if __name__ == '__main__':
     uvicorn.run(app, host='0.0.0.0', port=8000)
