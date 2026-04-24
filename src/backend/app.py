@@ -1,8 +1,8 @@
 # app.py
 
 import httpx, uvicorn, chromadb, time, asyncio
-from fastapi import FastAPI, HTTPException, UploadFile, File, Form, Body
-from typing import Union, List
+from fastapi import FastAPI, HTTPException, UploadFile, File, Form, Body, Depends
+from typing import Union, List, Any
 from utlis.pdf_helpers import read_pdf_text
 from databases.chroma.modelsChroma import generate_embedding
 from router.utterances import UTTERANCES, load_persisted_utterances
@@ -16,7 +16,8 @@ from router.semanticRouter import create_router
 from router.utterances import create_utterances, UTTERANCES
 from backend.modelsPydantic import (
     QueryResponse, QueryRequest, UpdateChannelInfo, UpdateChatHistory, 
-    UpdateGuildInfo, UpdateMemberInfo, UpdateChannelList, CollectionCreate
+    UpdateGuildInfo, UpdateMemberInfo, UpdateChannelList, CollectionCreate,
+    UserCreate, UserResponse
 )
 from services.queryLangchain import fetchGptResponse
 from services.nlpTools import TextProcessor
@@ -36,6 +37,13 @@ app = FastAPI()
 crud = CRUD()
 postgres_crud = PostgresCRUD()
 semantic_router = create_router(crud)
+
+def get_db():
+    db = postgres_crud.get_connection()
+    try:
+        yield db
+    finally:
+        postgres_crud.return_connection(db)
 
 
 @app.on_event("startup")
@@ -322,6 +330,66 @@ async def load_course_materials():
     except Exception as e:
         logging.error(f"app.py: Error with loading PDFs: {e}")
         return {"message": "Failed to load PDFs."}
+
+def _user_response(user):
+    if not user or not user.get("success") or not user.get("data"):
+        return None
+    return user["data"]
+
+def _validate_discord_user(user_data: UserCreate):
+    if user_data.role != "student":
+        raise HTTPException(status_code=403, detail="Discord users must have the student role")
+
+@app.post("/api/users", response_model=UserResponse)
+async def create_discord_user(user_data: UserCreate, db: Any = Depends(get_db)):
+    _validate_discord_user(user_data)
+    existing = _user_response(postgres_crud.get_user(db=db, username=user_data.username))
+    if existing:
+        return existing
+    created = postgres_crud.create_user(
+        db=db,
+        username=user_data.username,
+        email=user_data.email,
+        role="student",
+        default_collection=user_data.default_collection,
+    )
+    if not created.get("success"):
+        raise HTTPException(status_code=400, detail=created.get("error", "Failed to create user"))
+    user = _user_response(postgres_crud.get_user(db=db, user_id=created["data"]))
+    if user is None:
+        raise HTTPException(status_code=500, detail="User was created but could not be retrieved")
+    return user
+
+@app.get("/api/users/{username}", response_model=UserResponse)
+async def get_discord_user(username: str, db: Any = Depends(get_db)):
+    user = _user_response(postgres_crud.get_user(db=db, username=username))
+    if user is None:
+        raise HTTPException(status_code=404, detail="User not found")
+    return user
+
+@app.post("/api/users/batch", response_model=List[UserResponse])
+async def create_users_batch(users_data: List[UserCreate], db: Any = Depends(get_db)):
+    processed = []
+    for user_data in users_data:
+        _validate_discord_user(user_data)
+        existing = _user_response(postgres_crud.get_user(db=db, username=user_data.username))
+        if existing:
+            processed.append(existing)
+            continue
+        created = postgres_crud.create_user(
+            db=db,
+            username=user_data.username,
+            email=user_data.email,
+            role="student",
+            default_collection=user_data.default_collection,
+        )
+        if not created.get("success"):
+            raise HTTPException(status_code=400, detail=created.get("error", "Failed to create user"))
+        user = _user_response(postgres_crud.get_user(db=db, user_id=created["data"]))
+        if user is None:
+            raise HTTPException(status_code=500, detail="User was created but could not be retrieved")
+        processed.append(user)
+    return processed
     
 # @app.post('/upload_materials')
 # async def upload_course_materials(collection_name: str):

@@ -66,6 +66,30 @@ class DiscordBot:
         async def on_ready():
             await self.tree.sync()
             logging.info(f'We have logged in as {self.bot.user}')
+            users_to_sync = [
+                {
+                    "username": str(member.id),
+                    "email": f"{member.id}@discord.local",
+                    "role": "student",
+                    "default_collection": "general",
+                }
+                for guild in self.bot.guilds
+                for member in guild.members
+                if not member.bot
+            ]
+            if users_to_sync:
+                try:
+                    async with httpx.AsyncClient(timeout=30.0) as client:
+                        response = await client.post(
+                            "http://localhost:8000/api/users/batch",
+                            json=users_to_sync,
+                        )
+                    if response.status_code != 200:
+                        logging.error("Discord user sync failed with status %s", response.status_code)
+                    else:
+                        logging.info("Synchronized %d Discord users", len(users_to_sync))
+                except httpx.HTTPError as exc:
+                    logging.error("Discord user sync request failed: %s", exc)
 
         @self.bot.event
         async def on_message(message):

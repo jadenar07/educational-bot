@@ -61,4 +61,19 @@ class CollectionCreate(BaseModel):
     name: str
     description: Optional[str] = None
     metadata: Optional[Dict[str, Any]] = Field(default_factory=dict)
+
+class UserCreate(BaseModel):
+    username: str = Field(min_length=1, max_length=50)
+    email: str = Field(min_length=3, max_length=100)
+    role: str = "student"
+    default_collection: Optional[str] = None
+
+class UserResponse(BaseModel):
+    id: int
+    username: str
+    email: str
+    role: str
+    default_collection: Optional[str] = None
+
+    model_config = {"from_attributes": True}
     

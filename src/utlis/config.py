@@ -9,6 +9,12 @@ DB_PATH = os.getenv("DB_PATH")
 PROFANITY_THRESHOLD = float(os.getenv("PROFANITY_THRESHOLD"))
 DISTANCE_THRESHOLD = float(os.getenv("DISTANCE_THRESHOLD"))
 
+POSTGRES_USER = os.getenv("POSTGRES_USER", "postgres")
+POSTGRES_PASSWORD = os.getenv("POSTGRES_PASSWORD")
+POSTGRES_HOST = os.getenv("POSTGRES_HOST", "localhost")
+POSTGRES_PORT = os.getenv("POSTGRES_PORT", "5432")
+POSTGRES_NAME = os.getenv("POSTGRES_DB", "educational-bot")
+
 # Data directory for persisting utterances and other runtime data
 # Defaults to XDG_DATA_HOME, then user's home/.local/share/educational-bot, then ./data
 DATA_DIR = os.getenv(

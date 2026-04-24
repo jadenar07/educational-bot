@@ -52,6 +52,26 @@ async def wait_for_backend(timeout=10):
         await asyncio.sleep(0.5)
 
 
+# Register newly joined Discord members through the same backend endpoint used
+# by the startup synchronization in DiscordBot.
+@bot.event
+async def on_member_join(member):
+    if member.bot:
+        return
+    payload = {
+        "username": str(member.id),
+        "email": f"{member.id}@discord.local",
+        "role": "student",
+        "default_collection": "general",
+    }
+    try:
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            response = await client.post("http://localhost:8000/api/users", json=payload)
+        if response.status_code not in (200, 201):
+            logging.error("Failed to register Discord member %s: %s", member.id, response.status_code)
+    except httpx.HTTPError as exc:
+        logging.error("Failed to register Discord member %s: %s", member.id, exc)
+
 # Main function to run both FastAPI and Discord bot concurrently
 async def main():
     routes = ThreadSafeMap()
@@ -116,4 +136,3 @@ if __name__ == "__main__":
 this, along with the !update function, should be moved to a separate file
 responsible for model initialization
 '''
-
