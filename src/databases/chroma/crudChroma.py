@@ -1,5 +1,5 @@
 # crudChroma.py
-import chromadb, uuid, os, urllib.parse, asyncio, logging
+import chromadb, uuid, os, urllib.parse, asyncio, logging, time
 
 
 from utlis.config import DB_PATH
@@ -34,6 +34,7 @@ class CRUD():
             print(f"'{document.page_content}' is added to the collection {collection_name}")
 
     async def get_data_by_similarity(self, collection_name, query_embedding, top_k=10):
+        start = time.perf_counter()
         try:
             # Generate the embedding for the query
             print(f"Retrieving documents for the collection: {collection_name}")
@@ -43,31 +44,66 @@ class CRUD():
             print(f"Collection retrieved: {collection}")
 
             # Query the collection
-            results = collection.query(
+            results = await asyncio.to_thread(
+                collection.query,
                 query_embeddings=[query_embedding],
                 n_results=top_k
             )
 
+            logging.info(f"get_data_by_similarity {collection_name} took {(time.perf_counter() - start) * 1000:.2f}ms")
             return results
 
         except Exception as e:
             print(f"Error with retrieving relevant history: {e}")
             return []
-    
+
     async def get_data_by_id(self, collection_name, ids):
         # convert ids to str
         ids = [str(id) for id in ids]
+        start = time.perf_counter()
         try:
             collection = await asyncio.to_thread(self.client.get_or_create_collection, collection_name)
-            results = collection.get(
+            results = await asyncio.to_thread(
+                collection.get,
                 ids=ids,
                 # where={"style": "style1"}
             )
 
+            logging.info(f"get_data_by_id {collection_name} took {(time.perf_counter() - start) * 1000:.2f}ms")
             return results
 
         except Exception as e:
             print(f"Error with retrieving data by id: {e}")
+            return []
+
+    async def list_collections(self):
+        start = time.perf_counter()
+        try:
+            collections = await asyncio.to_thread(self.client.list_collections)
+            logging.info(f"list_collections took {(time.perf_counter() - start) * 1000:.2f}ms")
+            return collections
+        except Exception as e:
+            print(f"Error with listing collections: {e}")
+            return []
+
+    async def delete_collection(self, name):
+        start = time.perf_counter()
+        try:
+            await asyncio.to_thread(self.client.delete_collection, name=name)
+            logging.info(f"delete_collection {name} took {(time.perf_counter() - start) * 1000:.2f}ms")
+        except Exception as e:
+            print(f"Error with deleting collection: {e}")
+            raise
+
+    async def get_all_documents(self, collection_name):
+        start = time.perf_counter()
+        try:
+            collection = await asyncio.to_thread(self.client.get_or_create_collection, collection_name)
+            results = await asyncio.to_thread(collection.get)
+            logging.info(f"get_all_documents {collection_name} took {(time.perf_counter() - start) * 1000:.2f}ms")
+            return results
+        except Exception as e:
+            print(f"Error with retrieving all documents: {e}")
             return []
     
     async def save_pdfs(self, file_path, collection_name):
