@@ -15,6 +15,17 @@ from router.utterances import UTTERANCES
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 
 
+async def check_api_health():
+    try:
+        response = await get_from_app("health")
+        if response.status_code != 200:
+            return {"status": "down", "error": "Health endpoint unavailable"}
+        return response.json()
+    except (httpx.HTTPError, ValueError):
+        logging.exception("Backend health request failed")
+        return {"status": "down", "error": "Backend unavailable"}
+
+
 async def send_in_chunks(destination, text, chunk_size: int = 1900):
     """Send `text` to `destination` in multiple messages if it exceeds Discord's limit.
 
@@ -132,6 +143,48 @@ class DiscordBot:
         @self.tree.command(name="info", description="Show available commands")
         async def info(interaction: discord.Interaction):
             await interaction.response.send_message(await available_commands())
+
+        @self.tree.command(name="bot_status", description="Show backend health")
+        async def bot_status(interaction: discord.Interaction):
+            await interaction.response.defer()
+            health_data = await check_api_health()
+            status = health_data.get("status", "unknown")
+            color = {
+                "ok": discord.Color.green(),
+                "degraded": discord.Color.yellow(),
+            }.get(status, discord.Color.red())
+            emoji = {"ok": "✅", "degraded": "⚠️"}.get(status, "❌")
+
+            embed = discord.Embed(
+                title=f"{emoji} Backend Status: {status.upper()}",
+                color=color,
+                timestamp=discord.utils.utcnow(),
+            )
+            embed.add_field(
+                name="Latency",
+                value=f"{health_data.get('response_time_ms', 'N/A')} ms",
+                inline=True,
+            )
+            embed.add_field(
+                name="Version",
+                value=str(health_data.get("version") or "N/A"),
+                inline=True,
+            )
+            build_hash = str(health_data.get("build_hash") or "N/A")
+            embed.add_field(name="Build", value=build_hash[:7], inline=True)
+
+            checks = health_data.get("checks", {})
+            if checks:
+                checks_text = "\n".join(
+                    f"{'✅' if value == 'ok' else '❌'} {name}: {value}"
+                    for name, value in checks.items()
+                )
+                embed.add_field(
+                    name="Component Health", value=checks_text, inline=False
+                )
+            if status == "down":
+                embed.set_footer(text="Backend may be unavailable.")
+            await interaction.followup.send(embed=embed)
 
         @self.tree.command(name="invite", description="Invite the bot to the channel")
         async def invite(interaction: discord.Interaction):

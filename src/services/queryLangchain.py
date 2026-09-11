@@ -63,6 +63,10 @@ async def fetchGptResponse(query, role, data=None):
 
     # ensure common keys are available
     context.setdefault('query', query)
+    if 'student_submission' in context and 'submission' not in context:
+        context['submission'] = context['student_submission']
+    if 'retrieved_context' in context and 'rubric' not in context:
+        context['rubric'] = context['retrieved_context']
     # handle alternate keys
     if 'relevant_messages' in context and 'relevant_documents' not in context:
         context['relevant_documents'] = context['relevant_messages']

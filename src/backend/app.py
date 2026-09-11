@@ -3,6 +3,7 @@
 import httpx, uvicorn, chromadb, time, asyncio
 from fastapi import FastAPI, HTTPException, UploadFile, File, Form, Body, Depends
 from typing import Union, List, Any
+from datetime import datetime, timezone
 from utlis.pdf_helpers import read_pdf_text
 from databases.chroma.modelsChroma import generate_embedding
 from router.utterances import UTTERANCES, load_persisted_utterances
@@ -10,6 +11,7 @@ from router.utterances import UTTERANCES, load_persisted_utterances
 import sys
 import os
 import logging
+import subprocess
 
 # from router.semanticRouter import process_query
 from router.semanticRouter import create_router
@@ -33,6 +35,14 @@ sys.path.append(os.path.join(os.path.dirname(__file__), 'src'))
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 
+APP_VERSION = os.getenv("APP_VERSION") or "unknown"
+try:
+    BUILD_HASH = subprocess.check_output(
+        ["git", "rev-parse", "HEAD"], text=True, stderr=subprocess.DEVNULL
+    ).strip()
+except (OSError, subprocess.CalledProcessError):
+    BUILD_HASH = "dev"
+
 app = FastAPI()
 crud = CRUD()
 postgres_crud = PostgresCRUD()
@@ -44,6 +54,31 @@ def get_db():
         yield db
     finally:
         postgres_crud.return_connection(db)
+
+
+def _ping_postgres() -> None:
+    """Run the synchronous PostgreSQL health check outside the event loop."""
+    connection = None
+    try:
+        connection = postgres_crud.get_connection()
+        with connection.cursor() as cursor:
+            cursor.execute("SELECT 1")
+            cursor.fetchone()
+    finally:
+        if connection is not None:
+            postgres_crud.return_connection(connection)
+
+
+async def _run_health_check(check, name: str) -> str:
+    try:
+        await asyncio.wait_for(asyncio.to_thread(check), timeout=2.0)
+        return "ok"
+    except asyncio.TimeoutError:
+        logging.error("%s health check timed out", name)
+        return "unavailable"
+    except Exception:
+        logging.exception("%s health check failed", name)
+        return "unavailable"
 
 
 @app.on_event("startup")
@@ -69,7 +104,22 @@ async def startup_event():
 
 @app.get("/health")
 async def health():
-    return {"status": "ok"}
+    started = time.perf_counter()
+    checks = {
+        "chromadb": await _run_health_check(
+            crud.client.list_collections, "ChromaDB"
+        ),
+        "postgres": await _run_health_check(_ping_postgres, "PostgreSQL"),
+    }
+    status = "ok" if all(value == "ok" for value in checks.values()) else "degraded"
+    return {
+        "status": status,
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "version": APP_VERSION,
+        "build_hash": BUILD_HASH,
+        "checks": checks,
+        "response_time_ms": round((time.perf_counter() - started) * 1000, 2),
+    }
 
 @app.post('/channel_query') #, response_model=QueryResponse
 async def channel_query(request: QueryRequest):
@@ -487,8 +537,10 @@ async def grading_expert(file: UploadFile = File(...)):
 
         # Keep submission in data dict for template rendering, not as the query
         combined_data = {
+            "rubric": rubric_texts,
             "retrieved_context": rubric_texts,
-            "student_submission": text
+            "submission": submission_text,
+            "student_submission": submission_text
         }
 
         # Use a short query instead of the entire PDF text
