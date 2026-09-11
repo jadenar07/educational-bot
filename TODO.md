@@ -5,7 +5,7 @@ PostgreSQL CI changes in PR #6.
 
 ## 1. Fix global JWT authentication configuration
 
-**Priority:** High  
+**Priority:** High
 **Source:** PR #2
 
 PR #2 registers `RoleMiddleware` globally with:
@@ -32,7 +32,7 @@ authenticated endpoints unusable.
 
 ## 2. Enforce authentication for protected routes
 
-**Priority:** Critical  
+**Priority:** Critical
 **Source:** PR #2
 
 When no `Authorization` header is provided, the middleware assigns the
@@ -65,7 +65,7 @@ problem.
 
 ## 3. Preserve role propagation for `/resource_query`
 
-**Priority:** High  
+**Priority:** High
 **Source:** PR #2
 
 PR #2 makes `SemanticRouter.process_query()` role-aware, but the existing
@@ -93,7 +93,7 @@ corrected.
 
 ## 4. Repair role-routing authentication tests
 
-**Priority:** High  
+**Priority:** High
 **Source:** PR #2
 
 The role-routing tests send an authorization value that is not a valid Bearer
@@ -122,7 +122,7 @@ function is reached, so the tests do not actually exercise role routing.
 
 ## 5. Stabilize the PostgreSQL CI test setup
 
-**Priority:** High  
+**Priority:** High
 **Source:** PR #6
 
 The CI workflow starts a fresh PostgreSQL service and runs
@@ -148,3 +148,58 @@ collection or execution to fail before the application is meaningfully tested.
 - Add real assertions for create, get, and update behavior.
 - Avoid developer-specific credentials or pre-existing rows.
 - Verify the workflow against a clean PostgreSQL database.
+
+## 6. Protect administrative API endpoints
+
+**Priority:** Critical
+**Source:** PR #13
+
+The backend exposes route management, collection management, PDF upload, and
+user-management endpoints without authentication or authorization. Because the
+application listens on `0.0.0.0`, any network-reachable caller could modify
+routes, delete collections, upload documents, or create users.
+
+### Required work
+
+- Require authentication for administrative and data-mutating endpoints.
+- Enforce role-based authorization for route, collection, upload, and user
+  operations.
+- Use a service credential or private network boundary for Discord-to-backend
+  requests.
+- Return appropriate 401/403 responses for missing or insufficient
+  credentials.
+- Add tests covering unauthorized and authorized access for each protected
+  endpoint group.
+
+## 7. Prevent persistence of deleted profane messages
+
+**Priority:** High
+**Source:** PR #13
+
+The Discord message handler deletes messages that exceed the profanity
+threshold but still schedules `update_message()` for the same content. Deleted
+content can therefore be persisted in ChromaDB.
+
+### Required work
+
+- Stop processing a message after successful profanity removal.
+- Ensure moderation and persistence are separate decisions.
+- Add a regression test proving deleted profane messages are not persisted.
+- Preserve logging and user notification when deletion fails.
+
+## 8. Make Flake8 CI enforcement intentional
+
+**Priority:** High
+**Source:** PR #13
+
+The workflow changed Flake8 from non-blocking (`flake8 src/ || true`) to
+blocking (`flake8 src/`), but the repository currently contains existing lint
+violations. This can make CI fail for unrelated code and obscure application
+test results.
+
+### Required work
+
+- Decide which Flake8 rules and paths are part of the supported CI contract.
+- Fix existing violations or document narrowly scoped exclusions.
+- Run the configured lint command locally and in CI.
+- Keep lint blocking only after the repository passes the agreed baseline.
