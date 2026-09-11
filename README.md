@@ -57,6 +57,14 @@ The system uses a hierarchical semantic router that:
    python src/main.py
    ```
 
+### `/bot_status`
+
+Checks the health of the FastAPI backend and displays:
+- **API status:** ok, degraded, or down
+- **Latency:** response time in milliseconds
+- **Version/Build:** app version and git commit hash
+- **Component health:** ChromaDB and PostgreSQL connectivity
+
 ## Usage
 
 Once set up, the bot will automatically start listening to channels it's invited to and provide the following functionalities:
