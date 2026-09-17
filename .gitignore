@@ -8,7 +8,7 @@ pptx_files
 __pycache__ 
 
 # files
-.venv
+venv
 .env
 .python-version
 
