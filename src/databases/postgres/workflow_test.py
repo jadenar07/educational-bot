@@ -15,8 +15,8 @@ def created_user(db):
          cur.execute("DELETE FROM profiles.users;")
          db.commit()
     created = postgres.create_user(db, "marclikestocode", "mw4725@nyu.edu", "student")
+    yield created
     assert created['success'] is True
-    return created
 
 def test_get_user(db, created_user):
     fetched = postgres.get_user(db, user_id=created_user['data'])

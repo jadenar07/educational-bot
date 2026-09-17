@@ -1,6 +1,7 @@
 import os
 from dotenv import load_dotenv
 
+# Load .env file if it exists (for local development)
 load_dotenv()
 
 DISCORD_TOKEN = os.getenv("DISCORD_TOKEN")
@@ -29,16 +30,10 @@ DATA_DIR = os.getenv(
 os.makedirs(DATA_DIR, exist_ok=True)
 
 if not DISCORD_TOKEN:
-    raise ValueError("DISCORD_TOKEN is not set in .env file")
+    raise ValueError("DISCORD_TOKEN is not set in environment variables or .env file")
 
 if not OPENAI_API_KEY:
-    raise ValueError("OPENAI_API_KEY is not set in .env file")
+    raise ValueError("OPENAI_API_KEY is not set in environment variables or .env file")
 
 if not DB_PATH:
-    raise ValueError("DB_PATH is not set in .env file")
-
-if not PROFANITY_THRESHOLD:
-    raise ValueError("PROFANITY_THRESHOLD is not set in .env file")
-
-if not DISTANCE_THRESHOLD:
-    raise ValueError("DISTANCE_THRESHOLD is not set in .env file")
+    raise ValueError("DB_PATH is not set in environment variables or .env file")

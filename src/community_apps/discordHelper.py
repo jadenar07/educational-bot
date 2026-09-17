@@ -2,6 +2,9 @@ import sys, os, httpx, discord, logging
 sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 import numpy as np 
 from profanity_check import predict_prob
+from databases.chroma.modelsChroma import (
+    GuildInfo, ChannelInfo, MemberInfoChannel
+)
 from services.nlpTools import TextProcessor
 from utlis.config import PROFANITY_THRESHOLD
 from backend.modelsPydantic import UpdateChatHistory, Message

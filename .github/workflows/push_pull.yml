@@ -1,0 +1,211 @@
+name: Push and Pull Request Workflow
+
+on:
+  push:
+    branches:
+      - main
+      - marc
+      - ci-development
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+    inputs:
+      job:
+        description: 'Which job to run'
+        required: false
+        default: 'all'
+        type: choice
+        options:
+          - all
+          - postgres_tests
+          - cleanup
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+      - name: Install cleaner tools
+        run: |
+          python3 -m pip install --upgrade pip
+          pip install pip-tools
+      - name: Clean up w/ pip-tools
+        run: |
+          echo "Current directory: $(pwd)"
+          echo "Contents of src:"
+          ls -la src/
+          echo "Analyzing current requirements.txt..."
+          echo "Running pip-compile to generate optimized requirements..."
+          pip-compile requirements.txt --output-file=requirements_cleaned.txt 2>&1 || echo "pip-compile failed, using original"
+          echo "Generated files:"
+          find . -name "requirements*.txt" -type f
+          echo "Comparing original vs cleaned requirements:"
+          diff -u requirements.txt requirements_cleaned.txt || true
+          echo "Requirements analysis complete, preparing for artifact upload..."
+      - name: Upload cleaned requirements
+        uses: actions/upload-artifact@v4
+        with:
+          name: cleaned-requirements
+          path: requirements_cleaned.txt
+
+  postgres_tests:
+    runs-on: ubuntu-latest
+    needs: cleanup
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: marc
+          POSTGRES_PASSWORD: blarg223
+          POSTGRES_DB: ephemeraldb
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U marc -d ephemeraldb"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Download cleaned requirements
+        uses: actions/download-artifact@v4
+        with:
+          name: cleaned-requirements
+
+      - name: Use cleaned requirements
+        run: |
+          echo "Current directory: $(pwd)"
+          echo "Downloaded files:"
+          ls -la requirements_cleaned.txt
+          cp requirements_cleaned.txt requirements.txt
+          echo "Using cleaned requirements:"
+          cat requirements.txt
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+
+      - name: Install dependencies
+        run: |
+          python3 -m pip install --upgrade pip
+          python3 -m pip install flake8
+          pip install -r requirements.txt
+
+      - name: Linting...
+        run: flake8 src/ || true
+
+      - name: Wait for Postgres
+        run: |
+          for i in {1..10}; do
+            pg_isready -h 127.0.0.1 -p 5432 -U "$POSTGRES_USER" && break
+            sleep 2
+          done
+
+      - name: Verify Schema
+        env:
+          POSTGRES_USER: marc
+          POSTGRES_PASSWORD: blarg223
+          POSTGRES_DB: ephemeraldb
+          POSTGRES_HOST: 127.0.0.1
+          POSTGRES_PORT: 5432
+        run: |
+          PGPASSWORD=$POSTGRES_PASSWORD psql \
+            -h 127.0.0.1 \
+            -p 5432 \
+            -U $POSTGRES_USER \
+            -d $POSTGRES_DB \
+            -f src/docker/init-db.sql
+
+      - name: Run postgres tests
+        env:
+          POSTGRES_USER: marc
+          POSTGRES_PASSWORD: blarg223
+          POSTGRES_DB: ephemeraldb
+          POSTGRES_HOST: 127.0.0.1
+          POSTGRES_PORT: 5432
+        run: pytest src/databases/postgres/workflow_test.py -v
+
+  chroma_tests:
+    runs-on: ubuntu-latest
+    needs: cleanup
+    env:
+      PROFANITY_THRESHOLD: 0.7
+      DISTANCE_THRESHOLD: 0.25
+      DB_PATH: ./local_chromadb
+      DISCORD_TOKEN: ${{ secrets.DISCORD_TOKEN }}
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Download cleaned requirements
+        uses: actions/download-artifact@v4
+        with:
+          name: cleaned-requirements
+
+      - name: Use cleaned requirements
+        run: |
+          echo "Current directory: $(pwd)"
+          echo "Downloaded files:"
+          ls -la requirements_cleaned.txt
+          cp requirements_cleaned.txt requirements.txt
+          echo "Using cleaned requirements:"
+          cat requirements.txt
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10.12'
+
+      - name: Debug environment variables
+        run: |
+          echo "DISCORD_TOKEN: ${DISCORD_TOKEN:0:20}..."
+          echo "OPENAI_API_KEY: ${OPENAI_API_KEY:0:20}..."
+          echo "DB_PATH: $DB_PATH"
+          echo "PROFANITY_THRESHOLD: $PROFANITY_THRESHOLD"
+          echo "DISTANCE_THRESHOLD: $DISTANCE_THRESHOLD"
+
+      - name: Install dependencies
+        run: |
+          python3 -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Run chroma tests
+        run: pytest src/databases/chroma/chroma_tests.py -v
+  re-integration:
+    runs-on: ubuntu-latest
+    needs: [postgres_tests, chroma_tests]
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Download cleaned requirements
+        uses: actions/download-artifact@v4
+        with:
+          name: cleaned-requirements
+
+      - name: Check if requirements changed
+        id: check_diff
+        run: |
+          if diff -q requirements.txt requirements_cleaned.txt > /dev/null 2>&1; then
+            echo "No changes detected"
+            echo "changed=false" >> $GITHUB_OUTPUT
+          else
+            echo "Changes detected in requirements.txt"
+            echo "changed=true" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Update requirements if changed
+        if: steps.check_diff.outputs.changed == 'true'
+        run: |
+          cp requirements_cleaned.txt requirements.txt
+          echo "Updated requirements.txt with cleaned version"
+
+      - name: All tests passed
+        run: echo "All tests passed! Requirements are up to date."
