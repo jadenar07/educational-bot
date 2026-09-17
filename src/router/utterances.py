@@ -1,157 +1,128 @@
-PROGRESS_REPORT_UTTERANCES = [
-    "Can I have an update on my lab progress?",
-    "How far am I in my coursework?",
-    "What is my standing in the class?",
-    "Can you tell me how many labs I have completed?",
-    "Have I submitted all required assignments?",
+import sys, os, logging, ast
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')))
 
-    "Do I have any pending coursework?",
-    "How many more labs do I need to finish?",
-    "Am I on track to complete the course on time?",
-    "What is my progress in this semester's coursework?",
-    "How is my Benchmark 1 progress?",
+import asyncio
+from src.router.RouteMap import ThreadSafeMap
+from src.services.queryLangchain import fetchGptResponse
+import json
 
-    "How is my final report progress?",
-    "How many labs are left for me to finish?",
-    "Am I keeping pace with the course requirements?",
-    "What tasks do I still need to complete to ensure I pass on time?",
-    "How many lab projects have I successfully completed?",
+logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 
-    "Are there any pending assignments I still need to submit?",
-    "Have I turned in all assignments?",
-    "Are all of my labs submitted?",
-    "What tasks do I need to finish to ensure I pass this course?",
-    "What score do I have to get on this lab in order to maintain a passing score?",
+# Import DATA_DIR lazily to avoid circular import issues
+def _get_utterances_path():
+    """Get the path to utterances.json in the data directory."""
+    from src.utlis.config import DATA_DIR
+    return os.path.join(DATA_DIR, 'utterances.json')
 
-    "What score do I need to have on my final report to maintain a passing score?",
-    "What is my progress with the syllabus requirements?",
-    "How many lab reports have I successfully submitted?",
-    "Can you summarize how many labs ive completed?",
-    "How am I doing in terms of class participation?",
+LLM_ROLE = """
+You are an expert utterance generator for an academic support system. Your job is to create realistic student user utterances that belong to a specific intent category so they can be used for semantic routing.
 
-    "Can you give me a timeline for my upcoming assignments?",
-    "How often should I check in on my progress?",
-    "What feedback do I have on my recent lab submissions?",
-    "How does my performance compare to my peers?",
-    "What notes has the professor placed upon my performance?",
-] 
+When I give you a collection name and a category description, you must generate 20–30 natural language utterances that fit that category.
 
-PROBLEM_SOLVE_UTTERANCES = [
-    "I am struggling with my coursework.",
-    "How can I get better grades in my labs?",
-    "I need help understanding a lab experiment.",
-    "Can you assist me with my project?",
-    "I am finding this assignment too difficult.",
+Critical requirements:
 
-    "What can I do to improve my academic performance?",
-    "How can I boost my GPA?",
-    "I need guidance on solving a problem in my coursework.",
-    "How can I approach this tricky lab experiment?",
-    "How can I raise my academic standing this semester?",
+You must output a Python-style list assigned to a variable.
 
-    "What’s the best way to approach a challenging lab task?",
-    "How can I better understand complex topics in my studies?",
-    "What strategies can help me perform better in my lab assignments?",
-    "I’m stuck on my project. Can you provide some guidance?",
-    "I need clarification on a specific lab experiment.",
+The variable name must match the collection name exactly as provided (same spelling, casing, and formatting). Do NOT modify it into snake_case or ALL_CAPS unless that’s exactly what I provided.
 
-    "I have difficulty interpreting the lab data",
-    "How can I approach complex lab scenarios more effectively?",
-    "I'm not sure how to begin my lab report.",
-    "Can you suggest strategies to enhance my practical lab skills?",
-    "What steps can I take to connect theory with lab experiments?",
+The utterances must be diverse (avoid duplicates and shallow rewordings).
 
-    "How can I effectively apply theoretical concepts in my lab work?",
-    "How can I effectively apply practical concepts in my lab work?",
-    "What are some proven methods to enhance my experimental techniques in the lab?",
-    "Can you recommend ways to structure my lab report for better clarity?",
-    "How do I translate abstract concepts into actionable steps for lab experiments?",
+The utterances must be semantically aligned with the category description so a semantic router can correctly route them.
 
-    "What strategies can I use to bridge the gap between theory and practical application?",
-    "I'm struggling to transform theory into practice in my lab sessions. Any advice?",
-    "What techniques can I use to improve my hands-on laboratory skills?",
-    "How do I turn my research ideas into a well-structured lab report?",
-    "Can you share a step-by-step approach to connecting theory with practical experiments?",
-] 
+Use realistic university/college student phrasing, including a mix of:
 
-MATERIAL_INFO_UTTERANCES = [
-    "Where can I find additional study materials?",
-    "Is there a textbook for this class?",
-    "Where can I get research papers related to my lab?",
-    "Can you provide some reference material for my coursework?",
-    "Are there any online resources for this subject?",
+direct questions
 
-    "Where can I access past lab reports?",
-    "Can I find additional readings for this module?",
-    "Are there any recommended study guides for this course?",
-    "Where can I get supplementary notes?",
-    "Can you point me to extra learning resources for this course?",
+informal questions
 
-    "What are some reliable online platforms for resources in this subject?",
-    "Where can I access extra notes or handouts related to our course content?",
-    "Could you direct me to any study guides to enhance my understanding?",
-    "Do you know if past lab reports are available for review?",
-    "What is the grade distrubtion from numerical to letter",
+statements asking for help
 
-    "Are there any online lecture recordings available for this course?",
-    "Could you direct me to a course related digital library?",
-    "Where can I download practice problems and exercises for this subject?",
-    "Where can I access archived webinars or seminars for this class?",
-    "Is there an online repository for past quizzes and exam papers?",
+short and long phrasing variations
 
-    "Is there a portal for accessing scholarly papers related to our coursework?",
-    "Could you share a link to extended course notes and detailed outlines?",
-    "Could you direct me to online platforms that offer free academic materials?",
-    "Is there a central website where all course-related publications and resources are compiled?",
-    "Where on Brightspace can I access professor lecture notes and recordings?",
+Keep the output only to the Python variable assignment and list (no explanations, no headings, no extra text).
 
-    "Where can I download a collection of past assignments for practice?",
-    "Are there any study sets with practice tests for this course section?",
-    "Do you have a resource that compiles diverse learning materials for this class?",
-    "Is there a website where I can view interactive learning modules for this subject?",
-    "Where can I find extra visual aids like diagrams and charts to aid my understanding?",
-]  
+Input I will provide:
+Collection name: <collection_name>
+Category description: <category_description>
 
-MENTAL_SUPPORT_UTTERANCES = [
-    "I feel overwhelmed with my coursework.",
-    "How do I develop better study habits?",
-    "I am dealing with academic stress. Can you help?",
-    "What can I do to avoid procrastination?",
-    "I am feeling burnt out from studying too much.",
-
-    "How can I manage my time better?",
-    "I need advice on staying motivated.",
-    "Do you have any tips for handling academic pressure?",
-    "I’m struggling with my mental health due to my studies.",
-    "How can I establish a more consistent study routine?",
-
-    "I'm feeling exhausted from constant studying; how can I recharge?",
-    "How can I keep my motivation high throughout the semester?",
-    "Do you have any time management tips for balancing multiple assignments?",
-    "What advice do you have for handling the pressure of exams and deadlines?",
-
-    "What strategies can help me create a more structured study routine?",
-    "How can I break the cycle of delaying my tasks and get started on my work?",
-    "I'm looking for fresh ideas to keep my academic motivation alive.",
-    "After nonstop studying, I feel completely drained; how can I recharge?",
-    "With deadlines and exams looming, how can I better cope with the mounting stress?",
-
-    "What tips do you have for juggling several projects without feeling overwhelmed?",
-    "What practical methods can ease the pressure I'm feeling from my courses?",
-    "I'm constantly anxious about upcoming tests and assignments; how can I ease this pressure?",
-    "My mind feels cluttered with all the academic tasks; how can I simplify my schedule?",
-    "I’m caught in a loop of stress and low motivation with my classes—what changes could help?",
-
-    "I'm battling with self-doubt over my performance in class; any tips to build confidence?",
-    "I need guidance on how to set realistic academic goals without overwhelming myself.",
-    "I'm feeling perpetually swamped by assignments and exams; how can I create more breathing room?",
-    "I'm at a crossroads with my study habits and need advice on how to reinvigorate my approach.",
-    "My focus is slipping as I juggle multiple classes—can you suggest a plan to sharpen my concentration?",
+Your output must look exactly like this format:
+<collection_name> = [
+"Utterance 1...",
+"Utterance 2...",
+...
 ]
 
-UTTERANCES = {
-    "progress_report": PROGRESS_REPORT_UTTERANCES,
-    "problem_solve": PROBLEM_SOLVE_UTTERANCES,
-    "material_info": MATERIAL_INFO_UTTERANCES,
-    "mental_support": MENTAL_SUPPORT_UTTERANCES,
-}
+"""
+
+
+UTTERANCES = ThreadSafeMap()
+
+async def load_persisted_utterances():
+    """Load persisted utterances from file into UTTERANCES map. Call from async startup hook."""
+    utterances_path = _get_utterances_path()
+    
+    # Fallback to old location if file doesn't exist in new location
+    old_utterances_path = os.path.join(os.path.dirname(__file__), 'utterances.json')
+    
+    path_to_load = utterances_path if os.path.exists(utterances_path) else old_utterances_path
+    
+    if not os.path.exists(path_to_load):
+        logging.info(f"No persisted utterances file found at {path_to_load}.")
+        return
+    
+    try:
+        with open(path_to_load, 'r', encoding='utf-8') as f:
+            persisted = json.load(f)
+
+        # Populate the ThreadSafeMap
+        for name, utterances in persisted.items():
+            await UTTERANCES.set(name, utterances)
+        logging.info(f"Loaded {len(persisted)} persisted utterances from {path_to_load}")
+        
+        # If we loaded from old location, copy to new location for next time
+        if path_to_load == old_utterances_path and path_to_load != utterances_path:
+            try:
+                os.makedirs(os.path.dirname(utterances_path), exist_ok=True)
+                with open(utterances_path, 'w', encoding='utf-8') as f:
+                    json.dump(persisted, f, ensure_ascii=False, indent=2)
+                logging.info(f"Copied utterances to new location: {utterances_path}")
+            except Exception as copy_err:
+                logging.warning(f"Could not copy utterances to new location: {copy_err}")
+    except Exception as e:
+        logging.error(f"Failed to load persisted utterances: {e}", exc_info=True)
+
+async def create_utterances(query):
+    try:
+        response = await fetchGptResponse(query=query, role=LLM_ROLE)
+        name, utterances_str = response.split('=', 1)
+        name = name.strip()
+        utterances_str = utterances_str.strip()
+        # Parse the utterances string into a Python list
+        utterances = ast.literal_eval(utterances_str)
+        if not isinstance(utterances, list):
+            raise ValueError("Utterances is not a list after parsing.")
+
+        logging.info(f"Successfully generated utterances for {name}: {utterances}")
+        await UTTERANCES.set(name, utterances)
+        # Persist all utterances to file after update
+        try:
+            utterances_path = _get_utterances_path()
+            # Gather all utterances in the map
+            all_utterances = await UTTERANCES.snapshot()
+            with open(utterances_path, 'w', encoding='utf-8') as f:
+                json.dump(all_utterances, f, ensure_ascii=False, indent=2)
+            logging.info(f"Persisted utterances to {utterances_path}")
+        except Exception as file_err:
+            logging.error(f"Failed to persist utterances: {file_err}")
+        logging.info(f"Updated utterances: {UTTERANCES}")
+    except Exception as e:
+        raise Exception(f"Error creating utterances: {e}")
+
+
+# Tests
+# ex = """
+# name: mentalSupportUtterances, description: Student expressions related to academic stress, burnout, lack of motivation, and requests for emotional or mental health support.
+# """
+# if __name__ == "__main__":
+#     # result = asyncio.run(create_utterances(ex))
+#     print(str(UTTERANCES))

@@ -5,7 +5,7 @@ from psycopg2.extras import RealDictCursor #changes fetch returns to a dict
 from dotenv import load_dotenv
 import logging
 
-load_dotenv()
+load_dotenv(override = True)
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
@@ -19,8 +19,8 @@ class PostgresCRUD():
             cls._pool = pool.SimpleConnectionPool(
                 1,  # Minimum 1 connection
                 20,  # Maximum 20 connections
-                dbname=os.getenv("POSTGRES_DB"),
-                user=os.getenv("POSTGRES_USER"),
+                dbname=os.getenv("POSTGRES_DB","educational-bot"),
+                user=os.getenv("POSTGRES_USER","postgres"),
                 password=os.getenv("POSTGRES_PASSWORD"),
                 host=os.getenv("POSTGRES_HOST"),
                 port=os.getenv("POSTGRES_PORT"),
@@ -46,6 +46,22 @@ class PostgresCRUD():
             PostgresCRUD._pool.putconn(db)
             logger.info("Returned connection to pool")
     
+    async def ping(self):
+        """Simple health check - tests database connectivity."""
+        db = None
+        try:
+            db = self.get_connection()
+            with db.cursor() as cur:
+                cur.execute("SELECT 1;")
+                cur.fetchone()
+            return True
+        except Exception as e:
+            logger.error(f"Postgres ping failed: {e}")
+            raise
+        finally:
+            if db:
+                self.return_connection(db)
+    
     def create_user(self, db, username, email, role, default_collection=None):
         valid_roles = {"ta", "student", "professor", "admin"}
         if role not in valid_roles:
@@ -63,6 +79,7 @@ class PostgresCRUD():
                 logger.info(f"User created with ID: {user_id}")
                 return {"success": True, "message": "User created successfully!", "data": user_id}
         except psycopg2.Error as e:
+            db.rollback()
             logger.error(f"Error creating user: {e}")
             return {"success": False, "error": "User creation failed", "details": str(e)}
 
@@ -80,7 +97,6 @@ class PostgresCRUD():
         if not candidates:
             logger.warning("No valid identifier provided for get_user")
             return {"success": False, "error": "Provide user_id, email, or username"}
-
         try:
             with db.cursor() as cur:
                 for field, value in candidates:
@@ -90,6 +106,7 @@ class PostgresCRUD():
                         if user is not None:
                             return {"success": True, "data": user}
         except psycopg2.Error as e:
+            db.rollback()
             logger.error(f"Error fetching user: {e}")
             return {"success": False, "error": "Database query failed", "details": str(e)}
 
