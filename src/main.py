@@ -85,17 +85,24 @@ async def main():
         raise RuntimeError("Failed to load collections from backend")
 
     collections_data = response.json()
-    collections = collections_data.get("collections", collections_data)
 
-    if isinstance(collections, list):
-        for collection in collections:
-            name = collection.get("name")
-            description = collection.get("description")
+    if isinstance(collections_data, dict):
+        collections = collections_data.get("collections", [])
+    else:
+        collections = collections_data
 
-            if not name or not description:
-                continue
-            utterances = await UTTERANCES.get(name) or []
-            await routes.set(name, utterances)
+    if not isinstance(collections, list):
+        raise RuntimeError(
+            f"Unexpected collections response type: {type(collections_data).__name__}"
+        )
+    for collection in collections:
+        name = collection.get("name")
+        description = collection.get("description")
+
+        if not name or not description:
+            continue
+        utterances = await UTTERANCES.get(name) or []
+        await routes.set(name, utterances)
 
     # Send the routes map to backend to set up semantic router
     async with httpx.AsyncClient() as client:

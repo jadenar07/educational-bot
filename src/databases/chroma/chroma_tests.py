@@ -38,7 +38,11 @@ async def test_chroma_crud_basic():
     
         # List collections includes the new one
         collections = await crud.list_collections()
-        assert any(getattr(c, "name", c) == collection_name for c in collections)
+
+        assert any(
+            collection["name"] == collection_name
+            for collection in collections
+            )
 
         # Get all documents in collection
         all_docs = await crud.get_all_documents(collection_name)
@@ -72,7 +76,10 @@ async def test_delete_collection_removes_it():
     await crud.delete_collection(collection_name)
 
     collections = await crud.list_collections()
-    assert not any(getattr(c, "name", c) == collection_name for c in collections)
+    assert not any(
+        collection["name"] == collection_name
+        for collection in collections
+    )
 
 
 

@@ -99,16 +99,6 @@ class CRUD():
             print(f"Error with retrieving data by id: {e}")
             return []
 
-    async def list_collections(self):
-        start = time.perf_counter()
-        try:
-            collections = await asyncio.to_thread(self.client.list_collections)
-            logging.info(f"list_collections took {(time.perf_counter() - start) * 1000:.2f}ms")
-            return collections
-        except Exception as e:
-            print(f"Error with listing collections: {e}")
-            return []
-
     async def delete_collection(self, name):
         start = time.perf_counter()
         try:
@@ -299,43 +289,33 @@ class CRUD():
             print(f"Error deleting collection '{name}': {e}")
             return {"error": str(e)}
     
-    async def list_collections(self):
-        """List all collections with metadata"""
+    async def list_collections(self) -> list[dict]:
+        """Return all collections with normalized metadata."""
         try:
-            collections = self.client.list_collections()
+            collections = await asyncio.to_thread(
+                self.client.list_collections
+            )
+
             collection_list = []
-            
+
             for collection in collections:
-                try:
-                    # Get collection metadata and count
-                    count = collection.count()
-                    metadata = collection.metadata or {}
-                    
-                    collection_info = {
-                        "name": collection.name,
-                        "description": metadata.get("description"),
-                        "metadata": metadata,
-                        "document_count": count,
-                        "created_at": metadata.get("created_at")
-                    }
-                    collection_list.append(collection_info)
-                    
-                except Exception as e:
-                    collection_info = {
-                        "name": collection.name,
-                        "description": None,
-                        "metadata": {},
-                        "document_count": 0,
-                        "created_at": None
-                    }
-                    collection_list.append(collection_info)
-            
-            return {
-                "collections": collection_list,
-                "total_count": len(collection_list)
-            }
-            
+                metadata = collection.metadata or {}
+
+                document_count = await asyncio.to_thread(
+                    collection.count
+                )
+
+                collection_list.append({
+                    "name": collection.name,
+                    "description": metadata.get("description"),
+                    "metadata": metadata,
+                    "document_count": document_count,
+                    "created_at": metadata.get("created_at"),
+                })
+
+            return collection_list
+
         except Exception as e:
-            print(f"Error listing collections: {e}")
-            return {"error": str(e)}
-    
+            logging.exception("Error listing collections: %s", e)
+            return []
+        

@@ -2,6 +2,7 @@ import asyncio
 import sys
 import os
 from pathlib import Path
+import pytest
 
 # Add src to path so imports work
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
@@ -9,11 +10,13 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 from router.utterances import UTTERANCES, load_persisted_utterances
 from utlis.pdf_helpers import read_pdf_text
 
+@pytest.mark.asyncio
 async def test_utterance_loading():
     await load_persisted_utterances()
     snapshot = await UTTERANCES.snapshot()
     print(f"✓ Loaded {len(snapshot)} utterance collections")
-
+    
+@pytest.mark.asyncio
 async def test_pdf_async():
     import io
     from PyPDF2 import PdfWriter
