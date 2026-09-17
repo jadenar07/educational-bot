@@ -3,7 +3,7 @@ from discord.ext import commands
 from discord import app_commands
 from profanity_check import predict, predict_prob
 
-from utlis.config import DISCORD_TOKEN, PROFANITY_THRESHOLD
+from utlis.config import require_discord_token, PROFANITY_THRESHOLD
 from community_apps.discordHelper import (
     send_to_app, update_message, get_channels_and_messages, message_filter, available_commands,
     store_guild_info, store_channel_info, store_member_info, store_channel_list, get_parameters,

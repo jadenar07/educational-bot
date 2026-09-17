@@ -7,8 +7,8 @@ load_dotenv()
 DISCORD_TOKEN = os.getenv("DISCORD_TOKEN")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 DB_PATH = os.getenv("DB_PATH")
-PROFANITY_THRESHOLD = float(os.getenv("PROFANITY_THRESHOLD",0.7))
-DISTANCE_THRESHOLD = float(os.getenv("DISTANCE_THRESHOLD",0.25))
+PROFANITY_THRESHOLD = float(os.getenv("PROFANITY_THRESHOLD","0.7"))
+DISTANCE_THRESHOLD = float(os.getenv("DISTANCE_THRESHOLD","0.25"))
 
 POSTGRES_USER = os.getenv("POSTGRES_USER", "postgres")
 POSTGRES_PASSWORD = os.getenv("POSTGRES_PASSWORD")
@@ -29,11 +29,19 @@ DATA_DIR = os.getenv(
 # Ensure data directory exists
 os.makedirs(DATA_DIR, exist_ok=True)
 
-if not DISCORD_TOKEN:
-    raise ValueError("DISCORD_TOKEN is not set in environment variables or .env file")
+def require_openai_api_key() -> str:
+    if not OPENAI_API_KEY:
+        raise RuntimeError("OPENAI_API_KEY is required for OpenAI operations")
+    return OPENAI_API_KEY
 
-if not OPENAI_API_KEY:
-    raise ValueError("OPENAI_API_KEY is not set in environment variables or .env file")
 
-if not DB_PATH:
-    raise ValueError("DB_PATH is not set in environment variables or .env file")
+def require_discord_token() -> str:
+    if not DISCORD_TOKEN:
+        raise RuntimeError("DISCORD_TOKEN is required to start the Discord bot")
+    return DISCORD_TOKEN
+
+
+def require_db_path() -> str:
+    if not DB_PATH:
+        raise RuntimeError("DB_PATH is required for database operations")
+    return DB_PATH

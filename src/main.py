@@ -4,7 +4,7 @@ from community_apps.getMessageDiscord import DiscordBot
 from backend.app import app as fastapi_app
 from router.RouteMap import ThreadSafeMap
 from community_apps.discordHelper import get_from_app
-from utlis.config import DISCORD_TOKEN
+from utlis.config import require_discord_token
 import httpx
 import logging
 from router.utterances import UTTERANCES
@@ -34,7 +34,7 @@ async def run_fastapi():
 
 # Function to run the Discord bot
 async def run_discord_bot():
-    await bot.start(DISCORD_TOKEN)
+    await bot.start(require_discord_token())
 
 async def wait_for_backend(timeout=10):
     start = asyncio.get_event_loop().time()
